@@ -1,0 +1,13 @@
+[package]
+name = "chess-chaos-lab"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+chess-chaos-core = { path = "../../crates/chess-core" }
+chess-chaos-ai = { path = "../../crates/chess-ai" }
+chess-chaos-uci = { path = "../../crates/chess-uci" }
+shakmaty.workspace = true
+eframe = { version = "0.37.0", default-features = false, features = ["default_fonts", "glow", "x11", "wayland", "clipboard", "accesskit"] }
+

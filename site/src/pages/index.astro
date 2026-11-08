@@ -1,0 +1,44 @@
+---
+import '../styles/site.css';
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+const repo = 'https://github.com/ViolaPeracia/chess-chaos-lab';
+const squares = Array.from({ length: 64 }, (_, i) => (Math.floor(i / 8) + i % 8) % 2 ? 'dark' : 'light');
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#101b20" />
+    <meta name="description" content="A local Rust chess workbench for playing, testing ideas, and connecting your own UCI engine." />
+    <link rel="icon" href={`${base}/favicon.svg`} type="image/svg+xml" />
+    <title>Chess Chaos Lab — A local chess workbench</title>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="site-header">
+      <a class="wordmark" href={`${base}/`} aria-label="Chess Chaos Lab home"><span class="mark" aria-hidden="true">♞</span><span>CHESS CHAOS <b>LAB</b></span></a>
+      <nav aria-label="Main navigation"><a href="#features">Features</a><a href="#architecture">Architecture</a><a href={`${base}/docs/`}>Documentation</a><a href={repo}>GitHub ↗</a></nav>
+    </header>
+    <main id="main">
+      <section class="hero shell" aria-labelledby="hero-title">
+        <div class="hero-copy"><p class="eyebrow">LOCAL DESKTOP CHESS · RUST 2024</p><h1 id="hero-title">Every move is<br/><em>an experiment.</em></h1><p class="lede">Play on one board, test four local AI styles, or bring your own UCI engine. Chess Chaos Lab keeps the workbench on your machine.</p><div class="actions"><a class="button primary" href={`${repo}/releases`}>View releases <span aria-hidden="true">↗</span></a><a class="button secondary" href={`${base}/docs/`}>Read the docs <span aria-hidden="true">→</span></a></div><p class="release-line" id="release-status" aria-live="polite">Checking GitHub releases…</p></div>
+        <div class="hero-art" role="img" aria-label="Decorative chessboard illustration with an experimental move path; not an application screenshot"><div class="board-frame"><div class="board">{squares.map((tone, index) => <span class={tone} aria-hidden="true">{index === 4 ? '♚' : index === 27 ? '♞' : index === 52 ? '♙' : ''}</span>)}</div><div class="move-path" aria-hidden="true"></div></div><span class="art-label">FIG. 01 / THE BOARD AS LAB</span></div>
+      </section>
+      <div class="ticker" aria-label="Project status"><span>01 / PLAY LOCAL</span><span>02 / EXPLORE MOVES</span><span>03 / CONNECT AN ENGINE</span><span>EARLY PLAYABLE BUILD · 0.1.0 SOURCE</span></div>
+      <section class="shell section" id="features" aria-labelledby="features-title"><div class="section-heading"><p class="eyebrow">THE WORKBENCH</p><h2 id="features-title">Tools for the curious player.</h2><p>The current build focuses on one honest, playable desktop board.</p></div><div class="feature-list"><article><span class="index">01</span><div><h3>Play a proper game</h3><p>Standard legal moves, two local players, clocks, FEN, a move list, and one-game autosave.</p></div></article><article><span class="index">02</span><div><h3>Try four local AI styles</h3><p>Basic internal policies choose legal moves. Watch internal AI versus AI, or play White yourself.</p></div></article><article><span class="index">03</span><div><h3>Bring your own engine</h3><p>Point to a trusted local UCI executable for one-shot analysis or a White-versus-engine game. No engine ships with the app.</p></div></article></div></section>
+      <section class="showcase shell section" aria-labelledby="showcase-title"><div class="section-heading"><p class="eyebrow">ACTUAL DESKTOP BUILD</p><h2 id="showcase-title">One board, on your machine.</h2><p>Windows x64 release build captured on 9 November 2026. This view shows a restored hourglass game, paused after restart.</p></div><img src={`${base}/screenshots/desktop-windows-x64.jpg`} width="1536" height="864" alt="Actual Chess Chaos Lab window with chessboard, game controls, and FEN tools" loading="lazy" /></section>
+      <section class="contrast" id="architecture" aria-labelledby="architecture-title"><div class="shell architecture"><div><p class="eyebrow">UNDER THE HOOD</p><h2 id="architecture-title">Four crates. One board.</h2><p>The UI asks the core to validate moves; local AI and the UCI adapter provide candidates. Rendering stays separate from engine work.</p><a class="text-link" href={`${base}/docs/architecture/`}>Explore the architecture →</a></div><ol aria-label="Rust workspace crates"><li><span>01</span><strong>chess-core</strong><small>rules · notation · clocks</small></li><li><span>02</span><strong>chess-ai</strong><small>local move policies</small></li><li><span>03</span><strong>chess-uci</strong><small>local engine process</small></li><li><span>04</span><strong>desktop UI</strong><small>board · autosave · controls</small></li></ol></div></section>
+      <section class="shell section progress" aria-labelledby="roadmap-title"><div class="section-heading"><p class="eyebrow">CURRENT STATUS</p><h2 id="roadmap-title">Built to grow, clearly labeled.</h2></div><div class="milestones"><div><span class="status ongoing">In progress</span><h3>M0 / Playable Windows build</h3><p>Local checks pass. Wider GUI and accessibility verification remains open.</p></div><div><span class="status planned">Planned</span><h3>M1 / Chess correctness & PGN</h3><p>Broader rules tests and full PGN support.</p></div><div><span class="status planned">Planned</span><h3>M2 / Engine reliability</h3><p>Complete matches, failure handling, and process limits.</p></div></div><a class="text-link" href={`${base}/docs/roadmap/`}>Read the full roadmap →</a></section>
+      <section class="docs-strip"><div class="shell"><div><p class="eyebrow">DOCUMENTATION</p><h2>Start with the board. Follow the evidence.</h2></div><div class="doc-links"><a href={`${base}/docs/user-guide/`}>User guide <span>↗</span></a><a href={`${base}/docs/engine-integration/`}>UCI engines <span>↗</span></a><a href={`${base}/docs/testing/`}>Testing <span>↗</span></a><a href={`${base}/docs/known-limitations/`}>Known limits <span>↗</span></a></div></div></section>
+    </main>
+    <footer class="site-footer shell"><p>CHESS CHAOS LAB <span>© 2026</span></p><div><a href={repo}>GitHub</a><a href={`${base}/docs/`}>Docs</a><a href={`${base}/docs/roadmap/`}>Roadmap</a><a href={`${repo}/blob/main/CONTRIBUTING.md`}>Contribute</a><a href={`${repo}/blob/main/LICENSE`}>GPL-3.0-or-later</a></div></footer>
+    <script>
+      const status = document.getElementById('release-status');
+      fetch('https://api.github.com/repos/ViolaPeracia/chess-chaos-lab/releases/latest', { headers: { Accept: 'application/vnd.github+json' } })
+        .then((response) => response.ok ? response.json() : null)
+        .then((release) => { if (status) status.textContent = release?.tag_name ? `Latest published release: ${release.tag_name}` : 'Portable release pending; source build is available now.'; })
+        .catch(() => { if (status) status.textContent = 'Release status unavailable; check GitHub Releases.'; });
+    </script>
+  </body>
+</html>

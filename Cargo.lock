@@ -30,6 +30,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "chess-chaos-ai"
+version = "0.1.0"
+dependencies = [
+ "shakmaty",
+]
+
+[[package]]
 name = "chess-chaos-core"
 version = "0.1.0"
 dependencies = [

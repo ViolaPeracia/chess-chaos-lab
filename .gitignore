@@ -1,0 +1,17 @@
+/target/
+/vendor/
+/dist/
+/site/node_modules/
+/site/dist/
+/site/.astro/
+*.tmp
+*.log
+.env
+.env.*
+!.env.example
+.idea/
+.vscode/
+Thumbs.db
+*.exe
+*.zip
+

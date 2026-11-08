@@ -4,7 +4,7 @@ This roadmap is based on the current source, existing project notes, and the rep
 
 | Milestone | Status | Dependencies | Acceptance evidence |
 | --- | --- | --- | --- |
-| M0 — Playable Windows desktop `0.1.0` | In progress | Release workflow and Windows smoke test | 23 automated tests and local release build pass; acceptance also requires CI, public package, and wider GUI evidence. |
+| M0 — Playable Windows desktop `0.1.0` | In progress | Native keyboard and assistive technology audit | 23 automated tests, Windows CI, the public ZIP and checksum, Pages, and an app launch/screenshot are verified. Wider GUI and accessibility evidence remains. |
 | M1 — Chess correctness and PGN | Planned | Rules and notation tests | FIDE edge positions, full PGN comments/variations/NAGs, result and round-trip tests. |
 | M2 — Engine reliability | Planned | M1 position correctness | Full real-engine games, malformed output/timeout/crash tests, process cleanup, bounded resources. |
 | M3 — Analysis and training | Planned | M2, licensed data | Review and score history, puzzles/openings with provenance and tests. |
@@ -14,4 +14,4 @@ This roadmap is based on the current source, existing project notes, and the rep
 | M7 — Hardening | Planned | Stable feature paths | Fuzzing, corruption recovery, long-running process tests, profiling. |
 | M8 — Distribution | Planned | M0 release pipeline | Installer, signed artifacts if feasible, license manifest, verified Linux build on Linux. |
 
-Current partial implementations are detailed in the [feature matrix](feature-matrix.md). Immediate critical path: finish the verified `0.1.0` package and CI, expand chess/PGN correctness, then qualify full UCI matches. No dates are promised for unscoped milestones.
+Current partial implementations are detailed in the [feature matrix](feature-matrix.md). The [published `v0.1.0` release](https://github.com/ViolaPeracia/chess-chaos-lab/releases/tag/v0.1.0) establishes the Windows package and CI baseline. Immediate critical path: audit the native UI, expand chess/PGN correctness, then qualify full UCI matches. No dates are promised for unscoped milestones.

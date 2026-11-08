@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 300" role="img" aria-labelledby="title desc">
+  <title id="title">Chess Chaos Lab</title><desc id="desc">A stylized chessboard and laboratory flask beside the project name</desc>
+  <rect width="1200" height="300" fill="#101b20"/>
+  <path d="M0 299h1200M0 1h1200" stroke="#4b746f" stroke-width="2"/>
+  <g transform="translate(47 39)">
+    <rect width="222" height="222" fill="#183037" stroke="#547b73" stroke-width="2"/>
+    <g fill="#31524f"><path d="M0 0h55v55H0zm111 0h55v55h-55zM55 55h56v56H55zm111 0h56v56h-56zM0 111h55v55H0zm111 0h55v55h-55zM55 166h56v56H55zm111 0h56v56h-56z"/></g>
+    <path d="M85 43h52v8l-10 12v49l33 61a15 15 0 0 1-13 22H75a15 15 0 0 1-13-22l33-61V63L85 51z" fill="#d5e7d7" stroke="#101b20" stroke-width="4"/>
+    <path d="M76 156h71l15 25a7 7 0 0 1-7 10H67a7 7 0 0 1-7-10z" fill="#c97b54"/>
+    <path d="M92 42h38M97 97h28" stroke="#101b20" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="111" cy="137" r="6" fill="#c97b54"/>
+  </g>
+  <text x="325" y="116" fill="#dce8df" font-family="Segoe UI, Arial, sans-serif" font-size="61" font-weight="700" letter-spacing="-2">CHESS CHAOS LAB</text>
+  <text x="329" y="165" fill="#9fbdaf" font-family="Consolas, monospace" font-size="22" letter-spacing="2">RUST  /  CHESS  /  LOCAL AI</text>
+  <path d="M327 191h796" stroke="#36534f" stroke-width="2"/>
+  <text x="329" y="234" fill="#d7e4dc" font-family="Segoe UI, Arial, sans-serif" font-size="23">A local workbench for every move.</text>
+  <g fill="#c97b54"><circle cx="1112" cy="56" r="5"/><circle cx="1134" cy="56" r="5"/><circle cx="1156" cy="56" r="5"/></g>
+</svg>

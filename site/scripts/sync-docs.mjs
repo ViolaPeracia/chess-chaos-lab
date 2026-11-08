@@ -1,4 +1,4 @@
-import { readFile, readdir, mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFile, readdir, mkdir, rm, writeFile, copyFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, basename } from 'node:path';
 
@@ -9,6 +9,8 @@ const base = '/chess-chaos-lab/docs';
 const files = (await readdir(source)).filter((file) => file.endsWith('.md') && !['final-report.md', 'milestones.md', 'skills-usage.md', 'uci.md'].includes(file));
 await rm(join(site, 'src', 'content', 'docs'), { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
+await mkdir(join(site, 'public', 'screenshots'), { recursive: true });
+await copyFile(join(site, '..', 'assets', 'screenshots', 'desktop-windows-x64.jpg'), join(site, 'public', 'screenshots', 'desktop-windows-x64.jpg'));
 
 for (const file of files) {
   const original = await readFile(join(source, file), 'utf8');

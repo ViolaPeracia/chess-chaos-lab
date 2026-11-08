@@ -14,7 +14,9 @@ The source passes 23 automated tests, formatting, Clippy, and a release build on
 
 ## Screenshot
 
-An application screenshot has not yet been captured and checked for this repository. The banner above is original project artwork, not an app screenshot.
+![Windows x64 application showing the chessboard, controls, and a restored paused hourglass game](assets/screenshots/desktop-windows-x64.jpg)
+
+Actual Windows x64 release build captured on 9 November 2026. The restored hourglass game is paused after restart. The banner above is original project artwork.
 
 ## What works
 

@@ -46,6 +46,7 @@ a:focus-visible{outline:3px solid #e3ae85;outline-offset:4px}
 .index{font:700 14px Consolas,monospace;color:#ce8e6d;padding-top:6px}
 .feature-list h3{font:600 25px 'Space Grotesk',sans-serif;margin:0 0 7px}
 .feature-list p{margin:0;color:#aebfb6;line-height:1.6;max-width:650px}
+.showcase img{display:block;width:100%;height:auto;border:1px solid #47625e;box-shadow:18px 18px 0 #0b1418}
 .contrast{background:#d9e5d8;color:#192a28}
 .architecture{display:grid;grid-template-columns:1fr 1fr;gap:100px;padding-block:96px}
 .architecture p:not(.eyebrow){color:#47645a;line-height:1.7;font-size:17px;max-width:460px}

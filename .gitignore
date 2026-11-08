@@ -5,6 +5,7 @@
 /site/dist/
 /site/.astro/
 /site/src/content/docs/
+/site/public/screenshots/
 *.tmp
 *.log
 .env

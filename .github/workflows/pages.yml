@@ -20,7 +20,7 @@ jobs:
           node-version: '24'
           cache: npm
           cache-dependency-path: site/package-lock.json
-      - run: npm ci --prefix site
+      - run: npm ci --prefix site --ignore-scripts
       - run: npm run build --prefix site
       - run: node site/scripts/check-dist.mjs
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b # v5

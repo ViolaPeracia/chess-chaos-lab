@@ -4,7 +4,7 @@ This roadmap is based on the current source, existing project notes, and the rep
 
 | Milestone | Status | Dependencies | Acceptance evidence |
 | --- | --- | --- | --- |
-| M0 — Playable Windows desktop `0.1.0` | In progress | Release workflow and Windows smoke test | 23 automated tests and local release build pass; public package and CI still require verification. |
+| M0 — Playable Windows desktop `0.1.0` | In progress | Release workflow and Windows smoke test | 23 automated tests and local release build pass; acceptance also requires CI, public package, and wider GUI evidence. |
 | M1 — Chess correctness and PGN | Planned | Rules and notation tests | FIDE edge positions, full PGN comments/variations/NAGs, result and round-trip tests. |
 | M2 — Engine reliability | Planned | M1 position correctness | Full real-engine games, malformed output/timeout/crash tests, process cleanup, bounded resources. |
 | M3 — Analysis and training | Planned | M2, licensed data | Review and score history, puzzles/openings with provenance and tests. |

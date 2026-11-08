@@ -32,7 +32,7 @@ Full PGN, broader chess edge-case testing, robust engine matches, game library, 
 
 ## Download and quick start
 
-The automated Windows ZIP release is pending its GitHub release gates. Once published, use [the latest release page](https://github.com/ViolaPeracia/chess-chaos-lab/releases/latest) to download `chess-chaos-lab-v0.1.0-windows-x64.zip` and `SHA256SUMS.txt`, verify the checksum, extract the ZIP, then run `chess-chaos-lab.exe`. Until then, build from source below.
+Check [the latest release page](https://github.com/ViolaPeracia/chess-chaos-lab/releases/latest) for the Windows ZIP and `SHA256SUMS.txt`. Verify the checksum, extract the ZIP, then run `chess-chaos-lab.exe`. If no release is published yet, build from source below.
 
 Choose **Two players** for local play. Select an internal opponent to play White against an AI, or **Computer vs computer** with **Autoplay** to watch two internal policies. Full instructions are in the [user guide](docs/user-guide.md).
 

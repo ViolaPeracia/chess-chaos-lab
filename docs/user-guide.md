@@ -1,6 +1,6 @@
 # User guide
 
-1. Start the executable. Click a piece, then a highlighted destination. White and black pieces carry `W`/`B` prefixes so color is readable even without relying on board color.
+1. Start the executable. Click a piece, then a highlighted destination. White and black pieces carry `W`/`B` prefixes so color is readable even without relying on board color. For keyboard play, Tab into the board, use arrow keys to move focus, and Enter or Space to select a piece and its destination. Escape cancels a selected piece. The Windows accessibility tree names each square, its piece and whether it is selected or a legal destination.
 2. Choose **Two players**, one of four computer policies, or **Local UCI engine**. In computer mode you play White. For Local UCI, enter the full path to a trusted engine executable in **Engine executable path**. Choose **Computer vs computer** and enable **Autoplay** to watch a match between internal policies.
 3. For a timed game, choose minutes and **Clock mode**, then **New timed game**. Fischer adds the selected increment after each move. Bronstein gives each player a fresh delay before their main time starts falling. Hourglass transfers spent time to the other player's clock. **Pause clock** stops both the timer and move input. After restart the saved clock is paused; select **Resume clock**. Undo/redo is available only in untimed games.
 4. Choose a promotion piece before moving a pawn to the last rank. Use **Undo**, **Redo**, **New game**, **Flip board**, and the theme toggle in the toolbar.

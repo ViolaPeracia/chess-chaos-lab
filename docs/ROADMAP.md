@@ -4,7 +4,7 @@ This roadmap is based on the current source, existing project notes, and the rep
 
 | Milestone | Status | Dependencies | Acceptance evidence |
 | --- | --- | --- | --- |
-| M0 — Playable Windows desktop `0.1.0` | In progress | Native keyboard and assistive technology audit | 23 automated tests, Windows CI, the public ZIP and checksum, Pages, and an app launch/screenshot are verified. Wider GUI and accessibility evidence remains. |
+| M0 — Playable Windows desktop `0.1.0` | In progress | Spoken screen-reader, DPI and remaining GUI audit | 26 automated tests and a Windows GUI/UI Automation audit now cover keyboard moves and underpromotion, four AI replies, a complete AI-vs-AI GUI match, PGN mate, corruption recovery and write errors. The [audit](m0-windows-audit.md) records unverified gates; the public ZIP/checksum and earlier CI remain baseline evidence. |
 | M1 — Chess correctness and PGN | Planned | Rules and notation tests | FIDE edge positions, full PGN comments/variations/NAGs, result and round-trip tests. |
 | M2 — Engine reliability | Planned | M1 position correctness | Full real-engine games, malformed output/timeout/crash tests, process cleanup, bounded resources. |
 | M3 — Analysis and training | Planned | M2, licensed data | Review and score history, puzzles/openings with provenance and tests. |

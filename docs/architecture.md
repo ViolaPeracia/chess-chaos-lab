@@ -24,4 +24,3 @@ The UI never decides whether a move is legal. `Game` owns a position snapshot at
 The current AI uses one worker thread per move so search does not block rendering. UCI analysis and engine replies likewise run on worker threads. The GUI requests a UCI best move, then the core validates it against the current position. This is a simple architecture for one board, not a tournament scheduler. Engine CPU/memory isolation and worker cancellation remain to be built.
 
 Design choice: `shakmaty` supplies tested legal move generation and notation, avoiding a new hand-written rules engine. Its GPL-3.0-or-later license determines this project's license. The eframe glow backend provides native rendering without Electron.
-

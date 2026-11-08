@@ -9,4 +9,3 @@
 - PGN import supports only one plain mainline, no comments, variations, NAGs, or batch import. PGN headers are not fully validated.
 - UI uses text piece tokens and two themes. Windows accessibility controls are exposed, but no screen-reader or keyboard-only audit has been done.
 - Linux build, installer, offline vendor bundle, cargo advisory audit, and broader UI/AI performance benchmarks are pending. A perft microbenchmark has been run.
-

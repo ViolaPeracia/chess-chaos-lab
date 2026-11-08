@@ -11,4 +11,3 @@ Run `target/release/chess-chaos-lab.exe`. Dependencies are locked in `Cargo.lock
 To rebuild the Windows portable ZIP from the current source, run `powershell -File scripts/package.ps1`. The script builds the release executable, stages the executable, license, guide, documentation and source, then writes the ZIP and its SHA-256 checksum under `dist/`. The ZIP is not an offline source build because third-party Cargo dependencies are not vendored.
 
 Linux x64 is a target, not a verified build; it needs a Linux host and native windowing/OpenGL development packages. No installer or AppImage is provided yet.
-

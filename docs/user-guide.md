@@ -8,4 +8,3 @@
 6. When available, **Claim draw** handles threefold repetition or the 50-move rule. Checkmate, stalemate, insufficient material, fivefold repetition and 75-move draws end automatically.
 7. The current game and clock autosave and reload on startup. See `offline-mode.md` for the save path.
 8. To analyze with a local UCI engine, enter its full executable path in **Local UCI analysis** and click **Analyze**. The same path is used for UCI opponent play. No engine is included.
-

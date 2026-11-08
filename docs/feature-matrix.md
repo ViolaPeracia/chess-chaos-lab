@@ -25,4 +25,3 @@ Status is based on code and tests in this workspace. “Partial” is not releas
 | Statistics/library | Advanced | future | storage | Not implemented | Real local dataset and filters | None | roadmap |
 | Audio/achievements | Fun | future | licensed assets | Not implemented | Functional and locally stored | None | roadmap |
 | Offline runtime | Essential | all | local assets | Implemented by design | No runtime network code | Code inspection; packet-level test pending | offline mode |
-

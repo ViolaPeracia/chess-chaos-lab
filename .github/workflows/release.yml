@@ -79,5 +79,16 @@ jobs:
           foreach ($required in @("chess-chaos-lab-$env:GITHUB_REF_NAME-windows-x64.zip", 'SHA256SUMS.txt')) {
             if ($required -notin $assetNames) { throw "Uploaded asset missing: $required" }
           }
+          $verify = Join-Path $env:RUNNER_TEMP 'release-verify'
+          New-Item -ItemType Directory -Path $verify -Force | Out-Null
+          gh release download $env:GITHUB_REF_NAME --dir $verify
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download draft assets' }
+          $zipName = "chess-chaos-lab-$env:GITHUB_REF_NAME-windows-x64.zip"
+          $localHash = (Get-FileHash -LiteralPath (Join-Path dist $zipName) -Algorithm SHA256).Hash
+          $uploadedHash = (Get-FileHash -LiteralPath (Join-Path $verify $zipName) -Algorithm SHA256).Hash
+          if ($localHash -ne $uploadedHash) { throw 'Uploaded ZIP differs from verified package' }
+          $localSums = (Get-Content -LiteralPath dist/SHA256SUMS.txt -Raw).Trim()
+          $uploadedSums = (Get-Content -LiteralPath (Join-Path $verify 'SHA256SUMS.txt') -Raw).Trim()
+          if ($localSums -ne $uploadedSums) { throw 'Uploaded checksum differs from verified checksum' }
           gh release edit $env:GITHUB_REF_NAME --draft=false
           if ($LASTEXITCODE -ne 0) { throw 'Publishing release failed' }

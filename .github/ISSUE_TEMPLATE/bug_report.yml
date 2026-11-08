@@ -1,0 +1,23 @@
+name: Bug report
+description: Report a reproducible defect (use private reporting for security issues)
+title: "bug: "
+labels: [bug]
+body:
+  - type: textarea
+    id: behavior
+    attributes:
+      label: What happened?
+      description: Include expected and actual behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include a minimal FEN/PGN or move sequence when relevant.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: OS and version

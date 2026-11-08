@@ -6,7 +6,7 @@ const site = dirname(dirname(fileURLToPath(import.meta.url)));
 const source = join(site, '..', 'docs');
 const destination = join(site, 'src', 'content', 'docs', 'docs');
 const base = '/chess-chaos-lab/docs';
-const files = (await readdir(source)).filter((file) => file.endsWith('.md') && !['final-report.md', 'milestones.md', 'skills-usage.md', 'uci.md'].includes(file));
+const files = (await readdir(source)).filter((file) => file.endsWith('.md') && !['development-baseline.md', 'final-report.md', 'milestones.md', 'skills-usage.md', 'uci.md'].includes(file));
 await rm(join(site, 'src', 'content', 'docs'), { recursive: true, force: true });
 await mkdir(destination, { recursive: true });
 await mkdir(join(site, 'public', 'screenshots'), { recursive: true });

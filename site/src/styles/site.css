@@ -1,8 +1,9 @@
-:root{font-family:'DM Sans',Arial,sans-serif;color:#dce7df;background:#101b20;font-synthesis:none}
+:root{font-family:'DM Sans',Arial,sans-serif;color:#dce7df;background:#101b20;font-synthesis:none;color-scheme:dark}
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{margin:0}
 a{color:inherit}
+a,.button{touch-action:manipulation}
 a:focus-visible{outline:3px solid #e3ae85;outline-offset:4px}
 .shell{width:min(1160px,calc(100% - 48px));margin-inline:auto}
 .skip{position:absolute;top:-100px;left:16px;padding:12px;background:#dce7df;color:#101b20;z-index:10}
@@ -40,6 +41,7 @@ a:focus-visible{outline:3px solid #e3ae85;outline-offset:4px}
 .section{padding-block:104px}
 .section-heading{max-width:620px;margin-bottom:39px}
 .section h2,.contrast h2,.docs-strip h2{font:600 clamp(39px,4vw,58px)/1.08 'Space Grotesk',sans-serif;letter-spacing:-.05em;margin:0 0 14px}
+.hero h1,.section h2,.contrast h2,.docs-strip h2{text-wrap:balance}
 .section-heading>p:last-child,.architecture p:not(.eyebrow){font-size:17px;line-height:1.65;color:#aebfb6}
 .feature-list{border-top:1px solid #47615e}
 .feature-list article{display:grid;grid-template-columns:110px 1fr;border-bottom:1px solid #47615e;padding:26px 0;max-width:900px}
@@ -76,6 +78,7 @@ a:focus-visible{outline:3px solid #e3ae85;outline-offset:4px}
 .site-footer div{display:flex;gap:21px;flex-wrap:wrap}
 .site-footer a{text-decoration:none}
 .site-footer a:hover{text-decoration:underline}
+@media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.button:hover{transform:none}}
 @media(max-width:960px){.hero{grid-template-columns:1fr;gap:35px}
 .hero-art{max-width:520px}
 .architecture{gap:40px}

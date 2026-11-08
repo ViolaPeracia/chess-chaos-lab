@@ -47,6 +47,10 @@ cargo build --release --locked
 
 Dependencies may download during the first build. Linux and installers have not been validated. See [build details](docs/build.md).
 
+## Configuration and dependencies
+
+There is no account, API key, or required environment variable. The optional engine path is entered in the app. The workspace uses `shakmaty` for standard chess rules, `eframe`/`egui` for the desktop UI, and the Rust standard library for UCI process handling. `Cargo.lock` pins the full build graph. The documentation site separately uses Astro and Starlight.
+
 ## Local UCI engines
 
 Provide the full path to a trusted UCI engine executable in the app. The engine runs as a local process with your user permissions. One Stockfish 19 move and one-second analysis were reported in the prior GUI smoke run; this is not a full-engine-match qualification. [Engine guide](docs/engine-integration.md).
@@ -62,3 +66,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before making
 ## Known limitations
 
 PGN accepts one plain mainline, autosave stores one game without a backup UI, and real-engine timeout and full-match behavior remain unverified. There is no continuous network capture or keyboard-only accessibility audit. See the [full limitations](docs/known-limitations.md).
+
+## Contact
+
+Use [GitHub Issues](https://github.com/ViolaPeracia/chess-chaos-lab/issues) for bugs and requests, [Discussions](https://github.com/ViolaPeracia/chess-chaos-lab/discussions) for questions, and the private reporting route in [SECURITY.md](SECURITY.md) for vulnerabilities.

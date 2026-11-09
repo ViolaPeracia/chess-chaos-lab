@@ -46,6 +46,8 @@ struct App {
     last_tick: Instant,
     last_clock_save: Instant,
     autosave_blocked: Option<String>,
+    focus_after_popup: Option<egui::Id>,
+    open_combo: Option<egui::Id>,
 }
 
 impl Default for App {
@@ -103,6 +105,8 @@ impl Default for App {
             last_tick: now,
             last_clock_save: now,
             autosave_blocked,
+            focus_after_popup: None,
+            open_combo: None,
         }
     }
 }
@@ -413,6 +417,16 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if let Some(combo_id) = self.focus_after_popup.take() {
+            ctx.memory_mut(|memory| memory.request_focus(combo_id));
+        }
+        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.focus_after_popup = self.open_combo;
+            if self.open_combo.is_some() {
+                ctx.request_repaint();
+            }
+        }
+        self.open_combo = None;
         self.poll_clock(&ctx);
         self.poll_ai(&ctx);
         if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
@@ -513,7 +527,8 @@ impl eframe::App for App {
                             });
                             ui.horizontal(|ui| {
                                 let label = ui.label("Clock mode");
-                                egui::ComboBox::from_id_salt("clock_mode")
+                                let combo_id = combo_box_id(ui, "clock_mode");
+                                let combo = egui::ComboBox::from_id_salt("clock_mode")
                                     .selected_text(match self.clock_mode {
                                         ClockMode::Fischer => "Fischer increment",
                                         ClockMode::Bronstein => "Bronstein delay",
@@ -535,9 +550,11 @@ impl eframe::App for App {
                                             ClockMode::Hourglass,
                                             "Hourglass",
                                         );
-                                    })
-                                    .response
-                                    .labelled_by(label.id);
+                                    });
+                                combo.response.labelled_by(label.id);
+                                if combo.inner.is_some() {
+                                    self.open_combo = Some(combo_id);
+                                }
                             });
                             if ui.button("New timed game").clicked() {
                                 self.reset(Game::default());
@@ -577,40 +594,50 @@ impl eframe::App for App {
                             }
                             ui.add_space(10.0);
                             let previous_opponent = self.opponent;
-                            egui::ComboBox::from_label("Opponent")
-                                .selected_text(match self.opponent {
-                                    Opponent::Local => "Two players",
-                                    Opponent::Computer(s) => s.name(),
-                                    Opponent::External => "Local UCI engine",
-                                    Opponent::ComputerVsComputer(_, _) => "Computer vs computer",
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.opponent,
-                                        Opponent::Local,
-                                        "Two players",
-                                    );
-                                    for style in Style::ALL {
+                            ui.horizontal(|ui| {
+                                let combo_id = combo_box_id(ui, "opponent");
+                                let combo = egui::ComboBox::from_id_salt("opponent")
+                                    .selected_text(match self.opponent {
+                                        Opponent::Local => "Two players",
+                                        Opponent::Computer(s) => s.name(),
+                                        Opponent::External => "Local UCI engine",
+                                        Opponent::ComputerVsComputer(_, _) => {
+                                            "Computer vs computer"
+                                        }
+                                    })
+                                    .show_ui(ui, |ui| {
                                         ui.selectable_value(
                                             &mut self.opponent,
-                                            Opponent::Computer(style),
-                                            style.name(),
+                                            Opponent::Local,
+                                            "Two players",
                                         );
-                                    }
-                                    ui.selectable_value(
-                                        &mut self.opponent,
-                                        Opponent::External,
-                                        "Local UCI engine",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.opponent,
-                                        Opponent::ComputerVsComputer(
-                                            Style::Material,
-                                            Style::Search,
-                                        ),
-                                        "Computer vs computer",
-                                    );
-                                });
+                                        for style in Style::ALL {
+                                            ui.selectable_value(
+                                                &mut self.opponent,
+                                                Opponent::Computer(style),
+                                                style.name(),
+                                            );
+                                        }
+                                        ui.selectable_value(
+                                            &mut self.opponent,
+                                            Opponent::External,
+                                            "Local UCI engine",
+                                        );
+                                        ui.selectable_value(
+                                            &mut self.opponent,
+                                            Opponent::ComputerVsComputer(
+                                                Style::Material,
+                                                Style::Search,
+                                            ),
+                                            "Computer vs computer",
+                                        );
+                                    });
+                                let label = ui.label("Opponent");
+                                combo.response.labelled_by(label.id);
+                                if combo.inner.is_some() {
+                                    self.open_combo = Some(combo_id);
+                                }
+                            });
                             if self.opponent != previous_opponent {
                                 self.thinking = None;
                                 self.generation = self.generation.wrapping_add(1);
@@ -878,11 +905,15 @@ fn format_clock(milliseconds: u64) -> String {
     format!("{:02}:{:02}", seconds / 60, seconds % 60)
 }
 
+fn combo_box_id(ui: &egui::Ui, salt: &'static str) -> egui::Id {
+    ui.make_persistent_id(egui::IdSalt::new(salt))
+}
+
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 750.0])
-            .with_min_inner_size([800.0, 600.0]),
+            .with_inner_size([1000.0, 450.0])
+            .with_min_inner_size([700.0, 400.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -895,6 +926,19 @@ fn main() -> eframe::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn popup_focus_targets_the_combo_box_widget() {
+        egui::__run_test_ui(|ui| {
+            for salt in ["clock_mode", "opponent"] {
+                let widget = egui::ComboBox::from_id_salt(salt)
+                    .selected_text("choice")
+                    .show_ui(ui, |_| {})
+                    .response;
+                assert_eq!(combo_box_id(ui, salt), widget.id);
+            }
+        });
+    }
+
     #[test]
     fn accessible_square_names_identify_position_piece_and_move_state() {
         let game = Game::default();

@@ -5,7 +5,7 @@ This roadmap is based on the current source, existing project notes, and the rep
 | Milestone | Status | Dependencies | Acceptance evidence |
 | --- | --- | --- | --- |
 | M0 — Playable Windows desktop `0.1.0` | Completed | None | 27 automated tests, a Windows GUI audit of the main game and recovery paths, keyboard-only play, Narrator Speech Recap, and 125%/150% display scaling. The [audit](m0-windows-audit.md) records exact observations and remaining scope limits; the public ZIP/checksum and CI establish the original release baseline. |
-| M1 — Chess correctness and PGN | In progress | Rules and notation tests | FIDE edge positions, nested PGN round trips and UI/file integration pass locally; PR CI and manual UI acceptance remain to be verified. |
+| M1 — Chess correctness and PGN | In progress | Rules and notation tests | 44 automated tests, reference perft, nested PGN round trips, Windows GUI/file smoke and both PR CI runs pass; dependent PRs await review and merge. |
 | M2 — Engine reliability | Planned | M1 position correctness | Full real-engine games, malformed output/timeout/crash tests, process cleanup, bounded resources. |
 | M3 — Analysis and training | Planned | M2, licensed data | Review and score history, puzzles/openings with provenance and tests. |
 | M4 — Advanced modes | Planned | M1/M2, match scheduler | Recoverable AI tournaments and variant-specific rules, notation, and tests. |

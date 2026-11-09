@@ -15,3 +15,5 @@ On 9 November 2026, the local skill catalog and community candidates were checke
 | `skill-installer` | Installed system skill | Install the inspected README skill from its verified GitHub path. |
 
 The other candidate skills were not installed because the local frontend skill and short README skill covered the requested work. Rust and GitHub behavior was checked through local commands, current official documentation, and real GitHub Actions runs.
+
+For M1, `ponytail` kept `shakmaty` responsible for legal moves and SAN; `api-and-interface-design` guided the separate PGN tree and typed outcome; `debugging-and-error-recovery` was used to resolve test and Clippy failures; `security-and-hardening` guided input and resource bounds; and `code-review-and-quality` guided the final diff audit. No Rust-specific parser or property-testing skill was available in the local catalog, so the implementation used the project's Rust conventions and direct specification sources.

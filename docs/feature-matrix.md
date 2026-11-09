@@ -5,7 +5,7 @@ Status is based on code and tests in this workspace. “Partial” is not releas
 | Feature | Priority | Module | Dependencies | Status | Acceptance criteria | Test evidence | Reference |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Standard legal chess | Essential | core | shakmaty | Implemented | Legal moves and mate/stalemate work | `initial_perft`, `scholar_mate_undo_redo` | architecture |
-| Castling, en passant, promotions | Essential | core/UI | shakmaty | Partial | All cases playable and regression tested | Core tests for all three; promotion UI not manually verified | known limitations |
+| Castling, en passant, promotions | Essential | core/UI | shakmaty | Partial | All cases playable and regression tested | Core tests for all three; keyboard underpromotion passed in GUI | [M0 audit](m0-windows-audit.md) |
 | Draw rules | Essential | core/UI | shakmaty | Partial | Correct claimable and automatic outcomes | Stalemate, insufficient material, threefold, fivefold, 50/75, checkmate priority and time-forfeit tests | known limitations |
 | Human vs human | Essential | app | core | Implemented | Two local sides can move | Core move sequence test; GUI not automated | user guide |
 | Four internal AI policies | High | ai/app | core | Implemented | Each selects legal move | `every_style_returns_legal_move` | user guide |
@@ -21,7 +21,7 @@ Status is based on code and tests in this workspace. “Partial” is not releas
 | Tournaments/council | Advanced | future | engine scheduler | Not implemented | Reproducible results and recovery | None | roadmap |
 | Analysis/review | High | future | UCI | Partial | Live evaluation and reviewed moves | One-shot UCI adapter only | engine integration |
 | Puzzles/openings/training | High | future | licensed data | Not implemented | Real data and scoring | None | roadmap |
-| Themes/accessibility | High | app | egui | Partial | Usable themes, keyboard and contrast checks | Keyboard move and UI Automation names/status passed; calculated board text contrast ≥5.44:1; spoken screen reader and DPI remain unverified | [M0 audit](m0-windows-audit.md) |
+| Themes/accessibility | High | app | egui | Partial | Usable themes, keyboard and contrast checks | Keyboard move, Narrator speech, menu focus, and 125%/150% scaling passed; board text contrast ≥5.44:1; broader M5 audit remains | [M0 audit](m0-windows-audit.md) |
 | Statistics/library | Advanced | future | storage | Not implemented | Real local dataset and filters | None | roadmap |
 | Audio/achievements | Fun | future | licensed assets | Not implemented | Functional and locally stored | None | roadmap |
 | Offline runtime | Essential | all | local assets | Implemented by design | No runtime network code | Code inspection; packet-level test pending | offline mode |

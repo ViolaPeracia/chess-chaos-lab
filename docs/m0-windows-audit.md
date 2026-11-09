@@ -2,9 +2,9 @@
 
 ## Environment and method
 
-- Windows x64, Rust stable MSVC 1.99, `eframe`/`egui` 0.37. Release build from `codex/m0-windows-desktop-completion` in an isolated target directory. The existing `target/release` process was left untouched.
+- Windows x64, Rust stable MSVC 1.99, `eframe`/`egui` 0.37. Release build from `codex/m0-windows-desktop-completion` in an isolated target directory; the exact default release build also passed after the earlier process closed.
 - Each test instance inherited a separate `LOCALAPPDATA` under `.m0-test-*` in the repository. No normal `%LOCALAPPDATA%\ChessChaosLab` save was opened or changed.
-- Native interaction and accessibility observations used Windows UI Automation through Computer Use. The committed [v0.1.0 screenshot](../assets/screenshots/desktop-windows-x64.jpg) shows the baseline layout. The observations below are the log for the changed build; the UI Automation tree is the evidence for names, roles, states and game results.
+- Native interaction and accessibility observations used Windows UI Automation through Computer Use and the built-in Narrator Speech Recap. The committed [v0.1.0 screenshot](../assets/screenshots/desktop-windows-x64.jpg) shows the baseline layout. The observations below are the log for the changed build.
 - The public `v0.1.0` ZIP has SHA-256 `88e5a1fdef335cdbfa2b3262ad6ce50b33d5c050f5372b17699e13a1e6ca66d5`. `v0.1.0..HEAD` changed only roadmap/release documentation before this branch, so the baseline application source matches that release tag.
 
 `PASS` below means the specified observation was made in this audit. `Not Verified` never implies a pass.
@@ -39,16 +39,18 @@
 | Keyboard board control | PASS | Tab/Shift+Tab traversed buttons; arrow keys moved focus between adjacent squares; Return selected and moved. Escape cleared a selected square. No trap was observed in this path. |
 | Focus visibility | PASS for board path | Focus outline was visible on the active button in the captured Windows UI; focus order starts with toolbar then 64 board squares then sidebar. Traversing 64 squares is slow. |
 | Square names, roles and states | PASS in UI Automation | Before the fix, occupied squares were indistinguishable `WP`/`BP`. After the fix the tree exposed `e7, Black pawn, selected`, `e6, empty, legal destination`, and `e5, empty, legal destination` as buttons. |
-| Game status | PASS in UI Automation | Status role/value exposed `Black to move` and `Checkmate — Black wins`; the node is configured as a polite live region. Audible announcement was not verified. |
+| Game status | PASS with Narrator | Status role/value exposed `Black to move` and `Checkmate — Black wins` as a polite live region. Narrator Speech Recap recorded `Black to move`, `Black to move — check`, and `Checkmate — Black wins`. |
 | Promotion and settings names | PASS in UI Automation | Buttons expose `Promote to queen/rook/bishop/knight`; Minutes, bonus, clock mode, FEN, PGN and engine path controls have associated names. |
-| Menu/dialog keyboard paths | Not Verified | Opponent menu options were operable through UI Automation and Space selected the promotion choice; Enter/Space/Escape and focus return for every popup were not fully audited. |
-| Screen reader speech (Narrator/NVDA) | Not Verified | Windows Narrator executable exists, but speech output could not be heard or captured through the test interface. NVDA was not found on PATH. UI Automation inspection is not a substitute for a spoken-output test. |
+| Menu keyboard paths | PASS for both combo boxes | Tab focused Opponent and Clock mode; Space opened their menus, Down focused a menu item, and Escape returned focus to the combo box. The next Tab reached the next control. A focus-loss regression was found and fixed during this audit. No separate modal dialog is implemented in M0. |
+| Screen reader speech (Narrator) | PASS | Built-in Narrator Speech Recap recorded `a8, Black rook, button, off, a8`, `e2, White pawn, selected`, `e4, empty, legal destination`, `Black to move`, `Black to move — check`, and `Checkmate — Black wins`. Speech Recap was opened with Narrator key+Alt+X; see the [Microsoft guide](https://support.microsoft.com/en-us/accessibility/windows/narrator/complete-guide-to-narrator). NVDA was not available and remains Not Verified. |
 | Board piece-text contrast | PASS calculated | The minimum contrast among the four board fills and both piece text colors is 5.44:1. Other text and focus outlines were not measured. |
-| DPI/display scaling | Not Verified | No Windows display-scale change was made, so 125%/150% behavior remains untested. |
+| DPI/display scaling | PASS at 125% and 150% | The Windows Display setting was changed from the original 125% Recommended to 150%, the release app was restarted, and all eight board ranks remained visible at the new default window size. The side panel scrolled. The previous default window clipped the bottom rank at 150%. The setting was restored to 125%. Other scale factors are Not Verified. |
 
 ## Severity and open gates
 
 - **High, fixed:** indistinguishable occupied square names prevented a screen-reader user from locating a piece. Full square, piece and move-state names now appear in the Windows accessibility tree.
 - **High, fixed:** a corrupt autosave was silently ignored and could be overwritten by the next move. It is now copied to a unique backup before a fresh save; saving is disabled if backup fails.
+- **Medium, fixed:** Escape from Opponent and Clock mode menus dropped keyboard focus to the window root. Focus now returns to the combo box; Tab proceeds to the next control.
+- **Medium, fixed:** the initial window clipped the bottom rank at Windows 150% scaling on this 1100×768 display. A smaller initial and minimum window keeps the complete board visible and lets the settings panel scroll.
 - **Medium, open:** 64 sequential board controls make Tab traversal slow; arrow keys work, but a dedicated board-entry shortcut may improve navigation.
-- **M0 gate still open:** actual Narrator/NVDA speech, DPI scaling, and the remaining manual matrix rows need evidence. Keep Issue #5 open and M0 In progress until the gate is met.
+- **Not Verified:** NVDA, scale factors other than 125% and 150%, and claimable draws in the GUI. These are outside the observed M0 acceptance paths; they are not marked PASS.

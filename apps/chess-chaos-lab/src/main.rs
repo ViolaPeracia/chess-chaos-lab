@@ -3,10 +3,10 @@ use chess_chaos_core::clock::{Clock, ClockMode};
 use chess_chaos_core::{Game, display_target};
 use chess_chaos_uci::{Analysis, analyze};
 use eframe::egui::{self, Color32, RichText, Vec2};
-use shakmaty::{Color, Move, Position, Role, Square, uci::UciMove};
+use shakmaty::{Color, Move, Piece, Position, Role, Square, uci::UciMove};
 use std::{
-    fs,
-    path::PathBuf,
+    fs, io,
+    path::{Path, PathBuf},
     sync::mpsc::{self, Receiver},
     thread,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -45,11 +45,34 @@ struct App {
     clock_mode: ClockMode,
     last_tick: Instant,
     last_clock_save: Instant,
+    autosave_blocked: Option<String>,
+    focus_after_popup: Option<egui::Id>,
+    open_combo: Option<egui::Id>,
 }
 
 impl Default for App {
     fn default() -> Self {
-        let (game, mut clock) = load_game().unwrap_or_else(|| (Game::default(), None));
+        let (game, mut clock, message, autosave_blocked) = match load_game(&save_path()) {
+            Ok(Some((game, clock))) => (game, clock, String::new(), None),
+            Ok(None) => (Game::default(), None, String::new(), None),
+            Err(error) => match preserve_invalid_save(&save_path()) {
+                Ok(backup) => (
+                    Game::default(),
+                    None,
+                    format!(
+                        "Could not restore autosave ({error}); copy preserved at {}",
+                        backup.display()
+                    ),
+                    None,
+                ),
+                Err(backup_error) => {
+                    let warning = format!(
+                        "Could not restore autosave ({error}) or preserve it ({backup_error}); saving is disabled"
+                    );
+                    (Game::default(), None, warning.clone(), Some(warning))
+                }
+            },
+        };
         if let Some(clock) = &mut clock {
             clock.pause();
         }
@@ -64,7 +87,7 @@ impl Default for App {
             promotion: Role::Queen,
             flipped: false,
             dark: true,
-            message: String::new(),
+            message,
             thinking: None,
             generation: 0,
             ai_generation: 0,
@@ -81,6 +104,9 @@ impl Default for App {
             clock_mode,
             last_tick: now,
             last_clock_save: now,
+            autosave_blocked,
+            focus_after_popup: None,
+            open_combo: None,
         }
     }
 }
@@ -101,6 +127,10 @@ impl App {
     }
 
     fn persist(&mut self) {
+        if let Some(warning) = &self.autosave_blocked {
+            self.message = warning.clone();
+            return;
+        }
         if let Err(e) = save_game(&self.game, self.clock.as_ref()) {
             self.message = format!("Could not save game: {e}");
         }
@@ -356,7 +386,13 @@ impl App {
                     let button = egui::Button::new(text)
                         .fill(fill)
                         .min_size(Vec2::splat(cell));
-                    if ui.add(button).on_hover_text(sq.to_string()).clicked() {
+                    let response = ui.add(button);
+                    let selected = self.selected == Some(sq);
+                    let name = square_accessible_name(sq, piece, selected, legal.contains(&sq));
+                    response.widget_info(|| {
+                        egui::WidgetInfo::selected(egui::Role::Button, true, selected, &name)
+                    });
+                    if response.on_hover_text(sq.to_string()).clicked() {
                         self.click_square(sq);
                     }
                 }
@@ -381,8 +417,21 @@ impl App {
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        if let Some(combo_id) = self.focus_after_popup.take() {
+            ctx.memory_mut(|memory| memory.request_focus(combo_id));
+        }
+        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.focus_after_popup = self.open_combo;
+            if self.open_combo.is_some() {
+                ctx.request_repaint();
+            }
+        }
+        self.open_combo = None;
         self.poll_clock(&ctx);
         self.poll_ai(&ctx);
+        if ctx.input(|input| input.key_pressed(egui::Key::Escape)) {
+            self.selected = None;
+        }
         let visuals = if self.dark {
             egui::Visuals::dark()
         } else {
@@ -440,7 +489,15 @@ impl eframe::App for App {
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         ui.vertical(|ui| {
                             ui.heading("Game");
-                            ui.label(self.game.status());
+                            let status = self.game.status();
+                            let response = ui.label(&status);
+                            response.widget_info(|| {
+                                egui::WidgetInfo::labeled(egui::Role::Status, true, &status)
+                            });
+                            ctx.accesskit_node_builder(response.id, |node| {
+                                node.set_live(egui::accesskit::Live::Polite);
+                                node.set_live_atomic();
+                            });
                             if let Some(clock) = &self.clock {
                                 ui.label(format!(
                                     "White {}  ·  Black {}",
@@ -449,25 +506,29 @@ impl eframe::App for App {
                                 ));
                             }
                             ui.horizontal(|ui| {
-                                ui.label("Minutes");
+                                let label = ui.label("Minutes");
                                 ui.add(
                                     egui::DragValue::new(&mut self.clock_minutes).range(1..=180),
-                                );
+                                )
+                                .labelled_by(label.id);
                                 if self.clock_mode != ClockMode::Hourglass {
-                                    ui.label(if self.clock_mode == ClockMode::Fischer {
-                                        "Increment (s)"
-                                    } else {
-                                        "Delay (s)"
-                                    });
+                                    let label =
+                                        ui.label(if self.clock_mode == ClockMode::Fischer {
+                                            "Increment (s)"
+                                        } else {
+                                            "Delay (s)"
+                                        });
                                     ui.add(
                                         egui::DragValue::new(&mut self.increment_seconds)
                                             .range(0..=60),
-                                    );
+                                    )
+                                    .labelled_by(label.id);
                                 }
                             });
                             ui.horizontal(|ui| {
-                                ui.label("Clock mode");
-                                egui::ComboBox::from_id_salt("clock_mode")
+                                let label = ui.label("Clock mode");
+                                let combo_id = combo_box_id(ui, "clock_mode");
+                                let combo = egui::ComboBox::from_id_salt("clock_mode")
                                     .selected_text(match self.clock_mode {
                                         ClockMode::Fischer => "Fischer increment",
                                         ClockMode::Bronstein => "Bronstein delay",
@@ -490,6 +551,10 @@ impl eframe::App for App {
                                             "Hourglass",
                                         );
                                     });
+                                combo.response.labelled_by(label.id);
+                                if combo.inner.is_some() {
+                                    self.open_combo = Some(combo_id);
+                                }
                             });
                             if ui.button("New timed game").clicked() {
                                 self.reset(Game::default());
@@ -529,60 +594,80 @@ impl eframe::App for App {
                             }
                             ui.add_space(10.0);
                             let previous_opponent = self.opponent;
-                            egui::ComboBox::from_label("Opponent")
-                                .selected_text(match self.opponent {
-                                    Opponent::Local => "Two players",
-                                    Opponent::Computer(s) => s.name(),
-                                    Opponent::External => "Local UCI engine",
-                                    Opponent::ComputerVsComputer(_, _) => "Computer vs computer",
-                                })
-                                .show_ui(ui, |ui| {
-                                    ui.selectable_value(
-                                        &mut self.opponent,
-                                        Opponent::Local,
-                                        "Two players",
-                                    );
-                                    for style in Style::ALL {
+                            ui.horizontal(|ui| {
+                                let combo_id = combo_box_id(ui, "opponent");
+                                let combo = egui::ComboBox::from_id_salt("opponent")
+                                    .selected_text(match self.opponent {
+                                        Opponent::Local => "Two players",
+                                        Opponent::Computer(s) => s.name(),
+                                        Opponent::External => "Local UCI engine",
+                                        Opponent::ComputerVsComputer(_, _) => {
+                                            "Computer vs computer"
+                                        }
+                                    })
+                                    .show_ui(ui, |ui| {
                                         ui.selectable_value(
                                             &mut self.opponent,
-                                            Opponent::Computer(style),
-                                            style.name(),
+                                            Opponent::Local,
+                                            "Two players",
                                         );
-                                    }
-                                    ui.selectable_value(
-                                        &mut self.opponent,
-                                        Opponent::External,
-                                        "Local UCI engine",
-                                    );
-                                    ui.selectable_value(
-                                        &mut self.opponent,
-                                        Opponent::ComputerVsComputer(
-                                            Style::Material,
-                                            Style::Search,
-                                        ),
-                                        "Computer vs computer",
-                                    );
-                                });
+                                        for style in Style::ALL {
+                                            ui.selectable_value(
+                                                &mut self.opponent,
+                                                Opponent::Computer(style),
+                                                style.name(),
+                                            );
+                                        }
+                                        ui.selectable_value(
+                                            &mut self.opponent,
+                                            Opponent::External,
+                                            "Local UCI engine",
+                                        );
+                                        ui.selectable_value(
+                                            &mut self.opponent,
+                                            Opponent::ComputerVsComputer(
+                                                Style::Material,
+                                                Style::Search,
+                                            ),
+                                            "Computer vs computer",
+                                        );
+                                    });
+                                let label = ui.label("Opponent");
+                                combo.response.labelled_by(label.id);
+                                if combo.inner.is_some() {
+                                    self.open_combo = Some(combo_id);
+                                }
+                            });
                             if self.opponent != previous_opponent {
                                 self.thinking = None;
                                 self.generation = self.generation.wrapping_add(1);
                             }
                             if matches!(self.opponent, Opponent::External) {
-                                ui.label("Engine executable path");
-                                ui.text_edit_singleline(&mut self.engine_path);
+                                let label = ui.label("Engine executable path");
+                                ui.text_edit_singleline(&mut self.engine_path)
+                                    .labelled_by(label.id);
                             }
                             if matches!(self.opponent, Opponent::ComputerVsComputer(_, _)) {
                                 ui.checkbox(&mut self.autoplay, "Autoplay");
                             }
                             ui.horizontal(|ui| {
                                 ui.label("Promote to");
-                                for (role, name) in [
-                                    (Role::Queen, "Q"),
-                                    (Role::Rook, "R"),
-                                    (Role::Bishop, "B"),
-                                    (Role::Knight, "N"),
+                                for (role, name, accessible_name) in [
+                                    (Role::Queen, "Q", "Promote to queen"),
+                                    (Role::Rook, "R", "Promote to rook"),
+                                    (Role::Bishop, "B", "Promote to bishop"),
+                                    (Role::Knight, "N", "Promote to knight"),
                                 ] {
-                                    ui.selectable_value(&mut self.promotion, role, name);
+                                    let response =
+                                        ui.selectable_value(&mut self.promotion, role, name);
+                                    response.widget_info(|| {
+                                        egui::WidgetInfo::selected(
+                                            egui::Role::Button,
+                                            true,
+                                            self.promotion == role,
+                                            accessible_name,
+                                        )
+                                    });
                                 }
                             });
                             if ui
@@ -629,8 +714,9 @@ impl eframe::App for App {
                                 });
                             ui.separator();
                             ui.heading("Position & export");
-                            ui.label("FEN");
-                            ui.text_edit_multiline(&mut self.fen_input);
+                            let label = ui.label("FEN");
+                            ui.text_edit_multiline(&mut self.fen_input)
+                                .labelled_by(label.id);
                             if ui.button("Load FEN").clicked() {
                                 match Game::from_fen(&self.fen_input) {
                                     Ok(g) => self.reset(g),
@@ -650,8 +736,9 @@ impl eframe::App for App {
                                 ui.label(self.game.pgn());
                             }
                             ui.separator();
-                            ui.label("Paste plain PGN mainline");
-                            ui.text_edit_multiline(&mut self.pgn_input);
+                            let label = ui.label("Paste plain PGN mainline");
+                            ui.text_edit_multiline(&mut self.pgn_input)
+                                .labelled_by(label.id);
                             if ui.button("Load PGN").clicked() {
                                 match Game::from_pgn(&self.pgn_input) {
                                     Ok(g) => self.reset(g),
@@ -670,8 +757,9 @@ impl eframe::App for App {
                             }
                             ui.separator();
                             ui.heading("Local UCI analysis");
-                            ui.label("Engine executable path");
-                            ui.text_edit_singleline(&mut self.engine_path);
+                            let label = ui.label("Engine executable path");
+                            ui.text_edit_singleline(&mut self.engine_path)
+                                .labelled_by(label.id);
                             if ui
                                 .add_enabled(
                                     self.analysis_rx.is_none(),
@@ -704,6 +792,40 @@ impl eframe::App for App {
     }
 }
 
+fn square_accessible_name(
+    square: Square,
+    piece: Option<Piece>,
+    selected: bool,
+    legal_destination: bool,
+) -> String {
+    let contents = piece.map_or("empty".to_owned(), |piece| {
+        format!(
+            "{} {}",
+            if piece.color == Color::White {
+                "White"
+            } else {
+                "Black"
+            },
+            match piece.role {
+                Role::King => "king",
+                Role::Queen => "queen",
+                Role::Rook => "rook",
+                Role::Bishop => "bishop",
+                Role::Knight => "knight",
+                Role::Pawn => "pawn",
+            }
+        )
+    });
+    let state = if selected {
+        ", selected"
+    } else if legal_destination {
+        ", legal destination"
+    } else {
+        ""
+    };
+    format!("{square}, {contents}{state}")
+}
+
 fn save_path() -> PathBuf {
     let base = std::env::var_os("LOCALAPPDATA")
         .map(PathBuf::from)
@@ -727,19 +849,55 @@ fn save_game(game: &Game, clock: Option<&Clock>) -> std::io::Result<()> {
     fs::rename(temp, path)
 }
 
-fn load_game() -> Option<(Game, Option<Clock>)> {
-    let path = save_path();
-    if fs::metadata(&path).ok()?.len() > 1_000_000 {
-        return None;
+fn load_game(path: &Path) -> Result<Option<(Game, Option<Clock>)>, String> {
+    let metadata = match fs::metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error.to_string()),
+    };
+    if metadata.len() > 1_000_000 {
+        return Err("Save exceeds 1 MB limit".into());
     }
-    let text = fs::read_to_string(path).ok()?;
-    let game = Game::from_save_text(&text).ok()?;
+    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
+    if !(3..=4).contains(&text.lines().count()) {
+        return Err("Invalid autosave structure".into());
+    }
+    let game = Game::from_save_text(&text)?;
     let clock = text
         .lines()
         .nth(3)
-        .and_then(|line| Clock::from_save_text(line).ok())
-        .filter(|clock| clock.active() == game.position().turn());
-    Some((game, clock))
+        .map(Clock::from_save_text)
+        .transpose()?
+        .map(|clock| {
+            if clock.active() == game.position().turn() {
+                Ok(clock)
+            } else {
+                Err("Saved clock active side does not match game".to_owned())
+            }
+        })
+        .transpose()?;
+    Ok(Some((game, clock)))
+}
+
+fn preserve_invalid_save(path: &Path) -> io::Result<PathBuf> {
+    if fs::metadata(path)?.len() > 1_000_000 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Autosave exceeds 1 MB; move it aside to resume saving",
+        ));
+    }
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |time| time.as_nanos());
+    let backup = path.with_file_name(format!("autosave-corrupt-{timestamp}.txt"));
+    let mut source = fs::File::open(path)?;
+    let mut destination = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&backup)?;
+    io::copy(&mut source, &mut destination)?;
+    destination.sync_all()?;
+    Ok(backup)
 }
 
 fn format_clock(milliseconds: u64) -> String {
@@ -747,11 +905,15 @@ fn format_clock(milliseconds: u64) -> String {
     format!("{:02}:{:02}", seconds / 60, seconds % 60)
 }
 
+fn combo_box_id(ui: &egui::Ui, salt: &'static str) -> egui::Id {
+    ui.make_persistent_id(egui::IdSalt::new(salt))
+}
+
 fn main() -> eframe::Result {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1100.0, 750.0])
-            .with_min_inner_size([800.0, 600.0]),
+            .with_inner_size([1000.0, 450.0])
+            .with_min_inner_size([700.0, 400.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -764,6 +926,71 @@ fn main() -> eframe::Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn popup_focus_targets_the_combo_box_widget() {
+        egui::__run_test_ui(|ui| {
+            for salt in ["clock_mode", "opponent"] {
+                let widget = egui::ComboBox::from_id_salt(salt)
+                    .selected_text("choice")
+                    .show_ui(ui, |_| {})
+                    .response;
+                assert_eq!(combo_box_id(ui, salt), widget.id);
+            }
+        });
+    }
+
+    #[test]
+    fn accessible_square_names_identify_position_piece_and_move_state() {
+        let game = Game::default();
+        let e2: Square = "e2".parse().unwrap();
+        let e4: Square = "e4".parse().unwrap();
+        assert_eq!(
+            square_accessible_name(e2, game.position().board().piece_at(e2), true, false),
+            "e2, White pawn, selected"
+        );
+        assert_eq!(
+            square_accessible_name(e4, game.position().board().piece_at(e4), false, true),
+            "e4, empty, legal destination"
+        );
+    }
+
+    #[test]
+    fn corrupt_clock_is_preserved_before_new_autosave() {
+        let path = std::env::temp_dir().join(format!(
+            "chess-chaos-m0-test-{}-{}.txt",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let invalid = format!("{}clock broken\n", Game::default().save_text());
+        fs::write(&path, &invalid).unwrap();
+        assert!(load_game(&path).is_err());
+        let backup = preserve_invalid_save(&path).unwrap();
+        assert_eq!(fs::read_to_string(&backup).unwrap(), invalid);
+        fs::remove_file(path).unwrap();
+        fs::remove_file(backup).unwrap();
+    }
+
+    #[test]
+    fn truncated_or_oversized_autosave_is_not_loaded_or_copied() {
+        let path = std::env::temp_dir().join(format!(
+            "chess-chaos-m0-bounds-{}-{}.txt",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::write(&path, Game::default().fen()).unwrap();
+        assert!(load_game(&path).is_err());
+        fs::write(&path, vec![b'x'; 1_000_001]).unwrap();
+        assert!(load_game(&path).is_err());
+        assert!(preserve_invalid_save(&path).is_err());
+        fs::remove_file(path).unwrap();
+    }
+
     #[test]
     fn internal_ai_match_plays_legal_moves() {
         let mut game = Game::default();

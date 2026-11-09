@@ -10,7 +10,7 @@
 
 ## Current status
 
-The source passes 23 automated tests, formatting, Clippy, and a release build on the development Windows x64 machine as of 9 November 2026. This verifies the tested code paths, not a complete match against every engine or an accessibility audit. See the [feature matrix](docs/feature-matrix.md) and [test evidence](docs/testing.md).
+The M0 source passes 27 automated tests, formatting, Clippy, and a release build on the development Windows x64 machine as of 9 November 2026. A [Windows desktop audit](docs/m0-windows-audit.md) covers the main GUI paths, keyboard play, Narrator speech, and display scaling. See the [feature matrix](docs/feature-matrix.md) and [test evidence](docs/testing.md) for scope limits.
 
 ## Screenshot
 
@@ -28,7 +28,7 @@ Actual Windows x64 release build captured on 9 November 2026. The restored hourg
 
 ## Planned
 
-Full PGN, broader chess edge-case testing, robust engine matches, game library, analysis/review, training, tournaments, variants, statistics, and accessibility validation are on the [roadmap](docs/ROADMAP.md). These are not part of the current release.
+Full PGN, broader chess edge-case testing, robust engine matches, game library, analysis/review, training, tournaments, variants, statistics, and broader accessibility validation are on the [roadmap](docs/ROADMAP.md). These are not part of the current release.
 
 ## Download and quick start
 
@@ -65,7 +65,7 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and [AGENTS.md](AGENTS.md) before making
 
 ## Known limitations
 
-PGN accepts one plain mainline, autosave stores one game without a backup UI, and real-engine timeout and full-match behavior remain unverified. There is no continuous network capture or keyboard-only accessibility audit. See the [full limitations](docs/known-limitations.md).
+PGN accepts one plain mainline, autosave stores one game without a backup UI, and real-engine timeout and full-match behavior remain unverified. The [M0 keyboard and Narrator audit](docs/m0-windows-audit.md) covers the baseline desktop paths. See the [full limitations](docs/known-limitations.md).
 
 ## Contact
 

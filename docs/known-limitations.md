@@ -5,7 +5,7 @@
 - UCI supports one-shot analysis and playing White against one local engine. Stockfish 19 passed a one-move game smoke test and one-second analysis, but a full match, real-engine failure cases, and process resource isolation remain untested or absent.
 - Chess960 castling and variant rules are not exposed. Standard castling is selectable by the king destination.
 - Draw logic needs more FIDE edge-case tests; draw agreement is absent. Time forfeits are implemented, including a lone-king draw test.
-- Autosave stores one game and optional clock. Corrupt files are ignored, without a recovery UI or backup. A running clock resumes paused after restart. Undo/redo is disabled during timed games; redo moves in untimed games are lost after restart.
+- Autosave stores one game and optional clock. A corrupt save is copied to `autosave-corrupt-*.txt` before new saves; if the copy fails, saving is disabled for that session. There is no recovery UI. A running clock resumes paused after restart. Undo/redo is disabled during timed games; redo moves in untimed games are lost after restart. A failed Windows rename can leave a newer `autosave.tmp` next to the old save.
 - PGN import supports only one plain mainline, no comments, variations, NAGs, or batch import. PGN headers are not fully validated.
-- UI uses text piece tokens and two themes. Windows accessibility controls are exposed, but no screen-reader or keyboard-only audit has been done.
+- UI uses text piece tokens and two themes. Keyboard board moves including underpromotion, menu focus, Narrator speech, and Windows 125%/150% scaling passed the M0 audit. Traversing 64 squares with Tab is slow; arrow keys help. NVDA, other scaling factors, and a broader M5 accessibility audit remain unverified. See the [M0 audit](m0-windows-audit.md).
 - Linux build, installer, offline vendor bundle, cargo advisory audit, and broader UI/AI performance benchmarks are pending. A perft microbenchmark has been run.

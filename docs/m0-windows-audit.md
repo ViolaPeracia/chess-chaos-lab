@@ -15,7 +15,7 @@
 | --- | --- | --- |
 | Human vs human, legal move | PASS | Keyboard Tab reached board; Return selected `f2`, Shift+Tab reached `f4`, Return played `f4`. Status changed to Black to move; FEN and move list updated. |
 | Illegal move | PASS | Selected `e2` then clicked illegal `e5`; status stayed White to move and the starting FEN was unchanged. |
-| Check and checkmate | PASS | FEN `4k3/8/8/8/8/8/4R3/K7 b - - 0 1` exposed status `Black to move — check`. Plain PGN `1. f3 e5 2. g4 Qh4#` imported; status was `Checkmate — Black wins`. |
+| Check and checkmate | PASS | FEN `4k3/8/8/8/8/8/4R3/K7 b - - 0 1` exposed status `Black to move — check`. The release GUI also played `1. f3 e5 2. g4 Qh4#` through square clicks in an isolated human-vs-human game; the move list, final FEN `rnb1kbnr/pppp1ppp/8/4p3/6Pq/5P2/PPPPP2P/RNBQKBNR w KQkq - 1 3`, and `Checkmate — Black wins` status agreed. |
 | Draw | PASS for insufficient material | Keyboard underpromotion to knight left king+knight versus king; GUI status changed to `Draw by insufficient material`. Claimable draws were not exercised in GUI. |
 | Four internal AI policies | PASS | From Black to move after `e4`, GUI returned legal moves: Random `a6`, Capture hunter `Nh6`, Material collector `Nf6`, Alpha-beta depth 3 `Nf6`. |
 | AI vs AI full game | PASS | Autoplay ran from the initial position to 44 ply and GUI status `Checkmate — Black wins` (`r3kb2/ppp1p1p1/8/6q1/PP2p2r/8/7K/8 w q - 0 23`). The window remained responsive. |
@@ -52,5 +52,5 @@
 - **High, fixed:** a corrupt autosave was silently ignored and could be overwritten by the next move. It is now copied to a unique backup before a fresh save; saving is disabled if backup fails.
 - **Medium, fixed:** Escape from Opponent and Clock mode menus dropped keyboard focus to the window root. Focus now returns to the combo box; Tab proceeds to the next control.
 - **Medium, fixed:** the initial window clipped the bottom rank at Windows 150% scaling on this 1100×768 display. A smaller initial and minimum window keeps the complete board visible and lets the settings panel scroll.
-- **Medium, open:** 64 sequential board controls make Tab traversal slow; arrow keys work, but a dedicated board-entry shortcut may improve navigation.
+- **Medium, open:** 64 sequential board controls make Tab traversal slow; arrow keys work. [Issue #13](https://github.com/ViolaPeracia/chess-chaos-lab/issues/13) tracks a direct board-entry path.
 - **Not Verified:** NVDA, scale factors other than 125% and 150%, and claimable draws in the GUI. These are outside the observed M0 acceptance paths; they are not marked PASS.

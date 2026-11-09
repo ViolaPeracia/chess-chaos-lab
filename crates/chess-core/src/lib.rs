@@ -1,11 +1,22 @@
+use pgn::PgnGame;
 use shakmaty::{
-    CastlingMode, Chess, Color, EnPassantMode, Move, Position, Role, Square,
-    fen::Fen,
-    san::{San, SanPlus},
-    uci::UciMove,
+    CastlingMode, Chess, Color, EnPassantMode, Move, Position, Role, Square, fen::Fen,
+    san::SanPlus, uci::UciMove,
 };
 
 pub mod clock;
+pub mod pgn;
+
+/// A finished game result, separate from a player's right to claim a draw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GameOutcome {
+    /// Play may continue; a draw claim can still be available.
+    Ongoing,
+    /// The named side won.
+    Win(Color),
+    /// The game ended in a draw.
+    Draw,
+}
 
 #[derive(Clone)]
 pub struct Game {
@@ -17,6 +28,8 @@ pub struct Game {
     resigned: Option<Color>,
     draw_claimed: bool,
     time_forfeit: Option<(Color, bool)>,
+    pgn_tree: PgnGame,
+    pgn_path: Vec<usize>,
 }
 
 impl Default for Game {
@@ -24,13 +37,15 @@ impl Default for Game {
         let start = Chess::default();
         Self {
             start: start.clone(),
-            positions: vec![start],
+            positions: vec![start.clone()],
             moves: Vec::new(),
             san: Vec::new(),
             cursor: 0,
             resigned: None,
             draw_claimed: false,
             time_forfeit: None,
+            pgn_tree: local_pgn_tree(&start),
+            pgn_path: Vec::new(),
         }
     }
 }
@@ -47,16 +62,20 @@ impl Game {
         let start: Chess = fen
             .into_position(CastlingMode::Standard)
             .map_err(|e| format!("Illegal position: {e}"))?;
-        Ok(Self {
+        let mut game = Self {
             start: start.clone(),
-            positions: vec![start],
+            positions: vec![start.clone()],
             moves: Vec::new(),
             san: Vec::new(),
             cursor: 0,
             resigned: None,
             draw_claimed: false,
             time_forfeit: None,
-        })
+            pgn_tree: local_pgn_tree(&start),
+            pgn_path: Vec::new(),
+        };
+        game.sync_pgn_result();
+        Ok(game)
     }
 
     pub fn position(&self) -> &Chess {
@@ -82,6 +101,24 @@ impl Game {
         let san = SanPlus::from_move(self.position().clone(), m).to_string();
         let mut next = self.position().clone();
         next.play_unchecked(m);
+        let tree = &mut self.pgn_tree;
+        let parent = if self.cursor == 0 {
+            0
+        } else {
+            self.pgn_path[self.cursor - 1]
+        };
+        let node = if let Some(existing) = tree.nodes[parent]
+            .children
+            .iter()
+            .copied()
+            .find(|&index| tree.nodes[index].movement == Some(m))
+        {
+            existing
+        } else {
+            tree.add_move(parent, m, Vec::new())?
+        };
+        self.pgn_path.truncate(self.cursor);
+        self.pgn_path.push(node);
         self.moves.truncate(self.cursor);
         self.san.truncate(self.cursor);
         self.positions.truncate(self.cursor + 1);
@@ -89,6 +126,7 @@ impl Game {
         self.san.push(san);
         self.positions.push(next);
         self.cursor += 1;
+        self.sync_pgn_result();
         Ok(())
     }
 
@@ -149,12 +187,32 @@ impl Game {
         } else {
             "active".into()
         };
-        format!("{start}\n{moves}\n{outcome}\n")
+        let mut saved = format!("{start}\n{moves}\n{outcome}\n");
+        let tree = &self.pgn_tree;
+        let mut parent = 0;
+        let mut branches = Vec::new();
+        for &node in &self.pgn_path[..self.cursor] {
+            let branch = tree.nodes[parent]
+                .children
+                .iter()
+                .position(|&child| child == node)
+                .expect("PGN path must belong to tree");
+            branches.push(branch.to_string());
+            parent = node;
+        }
+        saved.push_str("pgn:");
+        saved.push_str(&branches.join(","));
+        saved.push(':');
+        for byte in self.pgn().bytes() {
+            saved.push_str(&format!("{byte:02x}"));
+        }
+        saved.push('\n');
+        saved
     }
 
     pub fn from_save_text(input: &str) -> Result<Self, String> {
-        if input.len() > 1_000_000 {
-            return Err("Save exceeds 1 MB limit".into());
+        if input.len() > 4_000_000 {
+            return Err("Save exceeds 4 MB limit".into());
         }
         let mut lines = input.lines();
         let mut game = Self::from_fen(lines.next().ok_or("Missing FEN")?)?;
@@ -172,67 +230,102 @@ impl Game {
             "active" => {}
             _ => return Err("Invalid save outcome".into()),
         }
+        game.sync_pgn_result();
+        if let Some(line) = lines.next()
+            && let Some(encoded) = line.strip_prefix("pgn:")
+        {
+            let (path, hex) = encoded.split_once(':').ok_or("Invalid saved PGN")?;
+            if hex.len() % 2 != 0 {
+                return Err("Invalid saved PGN encoding".into());
+            }
+            let bytes = hex
+                .as_bytes()
+                .as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| {
+                    u8::from_str_radix(std::str::from_utf8(pair).map_err(|e| e.to_string())?, 16)
+                        .map_err(|e| e.to_string())
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let pgn = String::from_utf8(bytes).map_err(|e| e.to_string())?;
+            let mut parsed = Self::from_pgn(&pgn)?;
+            let mut node = 0;
+            if !path.is_empty() {
+                for branch in path.split(',') {
+                    let branch: usize = branch.parse().map_err(|_| "Invalid saved PGN path")?;
+                    node = *parsed.pgn_tree.nodes[node]
+                        .children
+                        .get(branch)
+                        .ok_or("Invalid saved PGN path")?;
+                }
+            }
+            parsed.goto_pgn_node(node)?;
+            if parsed.fen() != game.fen() {
+                return Err("Saved PGN position disagrees with moves".into());
+            }
+            parsed.resigned = game.resigned;
+            parsed.draw_claimed = game.draw_claimed;
+            parsed.time_forfeit = game.time_forfeit;
+            game = parsed;
+        }
         Ok(game)
     }
 
     pub fn from_pgn(input: &str) -> Result<Self, String> {
-        if input.len() > 1_000_000 {
-            return Err("PGN exceeds 1 MB limit".into());
-        }
-        let mut fen = None;
-        let mut body = String::new();
-        for line in input.lines() {
-            let line = line.trim();
-            if line.starts_with('[') {
-                if line.starts_with("[FEN \"") && line.ends_with("\"]") {
-                    fen = Some(&line[6..line.len() - 2]);
-                } else if !line.ends_with(']') {
-                    return Err("Malformed PGN header".into());
-                }
-            } else {
-                body.push_str(line);
-                body.push(' ');
-            }
-        }
-        if body.contains(['{', '}', '(', ')', ';', '$']) {
-            return Err(
-                "Only a single plain mainline without comments, variations or NAGs is supported"
-                    .into(),
-            );
-        }
-        let mut game = if let Some(fen) = fen {
-            Self::from_fen(fen)?
-        } else {
-            Self::default()
-        };
-        for token in body.split_whitespace() {
-            if ["1-0", "0-1", "1/2-1/2", "*"].contains(&token) {
-                break;
-            }
-            let token = token.trim_start_matches(|c: char| c.is_ascii_digit() || c == '.');
-            let token = token.trim_end_matches(['!', '?']);
-            if token.is_empty() {
-                continue;
-            }
-            let san = San::from_ascii(token.as_bytes())
-                .map_err(|e| format!("Invalid SAN {token}: {e}"))?;
-            let m = san
-                .to_move(game.position())
-                .map_err(|e| format!("Illegal SAN {token}: {e}"))?;
-            game.play(m)?;
+        let tree = PgnGame::parse(input)?;
+        let mut game = Self::from_fen(&tree.fen_at(0).ok_or("Missing PGN start")?)?;
+        game.pgn_tree = tree;
+        let mut node = 0;
+        while let Some(&next) = game.pgn_tree.nodes[node].children.first() {
+            game.pgn_path.push(next);
+            let entry = &game.pgn_tree.nodes[next];
+            game.moves.push(entry.movement.ok_or("Missing PGN move")?);
+            game.san.push(entry.san.clone());
+            game.positions.push(entry.position.clone());
+            game.cursor += 1;
+            node = next;
         }
         Ok(game)
+    }
+
+    /// The PGN tree for this game, including all mainline and variation nodes.
+    pub fn pgn_tree(&self) -> &PgnGame {
+        &self.pgn_tree
+    }
+
+    /// Navigate to any move in the PGN tree and make its position current.
+    pub fn goto_pgn_node(&mut self, node: usize) -> Result<(), String> {
+        let tree = &self.pgn_tree;
+        let path = tree.path_to(node).ok_or("Invalid PGN node")?;
+        self.moves.clear();
+        self.san.clear();
+        self.positions.truncate(1);
+        for &index in &path {
+            let entry = &tree.nodes[index];
+            self.moves.push(entry.movement.ok_or("Missing PGN move")?);
+            self.san.push(entry.san.clone());
+            self.positions.push(entry.position.clone());
+        }
+        self.cursor = path.len();
+        self.pgn_path = path;
+        self.resigned = None;
+        self.draw_claimed = false;
+        self.time_forfeit = None;
+        Ok(())
     }
 
     pub fn resign(&mut self, color: Color) {
         if !self.is_over() {
             self.resigned = Some(color);
+            self.sync_pgn_result();
         }
     }
 
     pub fn forfeit_on_time(&mut self, color: Color) {
         if !self.is_over() {
             self.time_forfeit = Some((color, self.position().has_insufficient_material(!color)));
+            self.sync_pgn_result();
         }
     }
 
@@ -240,17 +333,52 @@ impl Game {
         !self.is_over() && (self.position().halfmoves() >= 100 || self.repetition_count() >= 3)
     }
 
+    /// Whether announcing this legal move would make a threefold or 50-move claim valid.
+    /// The move is not played when the claim is made.
+    pub fn can_claim_draw_after(&self, movement: Move) -> bool {
+        if self.is_over() || !self.position().is_legal(movement) {
+            return false;
+        }
+        let mut next = self.position().clone();
+        next.play_unchecked(movement);
+        if next.is_checkmate() {
+            return false;
+        }
+        let key = repetition_key(&next);
+        next.halfmoves() >= 100
+            || self.positions[self.cursor.saturating_sub(next.halfmoves() as usize)..=self.cursor]
+                .iter()
+                .filter(|position| repetition_key(position) == key)
+                .count()
+                >= 2
+    }
+
+    /// Claim a draw by announcing a legal move that would meet the FIDE threshold.
+    pub fn claim_draw_after(&mut self, movement: Move) -> bool {
+        if !self.can_claim_draw_after(movement) {
+            return false;
+        }
+        self.draw_claimed = true;
+        self.sync_pgn_result();
+        true
+    }
+
     pub fn claim_draw(&mut self) -> bool {
         if !self.can_claim_draw() {
             return false;
         }
         self.draw_claimed = true;
+        self.sync_pgn_result();
         true
     }
 
     pub fn repetition_count(&self) -> usize {
         let current = repetition_key(self.position());
-        self.positions[..=self.cursor]
+        // A pawn move or capture cannot be undone, so earlier positions cannot repeat.
+        self.positions[self
+            .cursor
+            .saturating_sub(self.position().halfmoves() as usize)
+            ..=self.cursor]
             .iter()
             .filter(|p| repetition_key(p) == current)
             .count()
@@ -258,6 +386,9 @@ impl Game {
 
     pub fn status(&self) -> String {
         if let Some(color) = self.resigned {
+            if self.position().has_insufficient_material(!color) {
+                return "Draw: opponent cannot checkmate after resignation".into();
+            }
             return format!("{} resigned", color_name(color));
         }
         if self.draw_claimed {
@@ -306,48 +437,75 @@ impl Game {
             || self.repetition_count() >= 5
     }
 
+    /// Return a terminal result or `Ongoing`. A claimable draw remains ongoing.
+    pub fn outcome(&self) -> GameOutcome {
+        if !self.is_over() {
+            return GameOutcome::Ongoing;
+        }
+        if self.draw_claimed
+            || self.time_forfeit.is_some_and(|(_, draw)| draw)
+            || self
+                .resigned
+                .is_some_and(|color| self.position().has_insufficient_material(!color))
+            || self.position().is_stalemate()
+            || self.position().is_insufficient_material()
+            || (!self.position().is_checkmate()
+                && (self.position().halfmoves() >= 150 || self.repetition_count() >= 5))
+        {
+            return GameOutcome::Draw;
+        }
+        let loser = self
+            .resigned
+            .or_else(|| self.time_forfeit.map(|(color, _)| color))
+            .unwrap_or(self.position().turn());
+        GameOutcome::Win(!loser)
+    }
+
     pub fn pgn(&self) -> String {
-        let mut result = String::from("[Event \"Chess Chaos Lab\"]\n[Site \"Local\"]\n");
-        if self.start != Chess::default() {
-            result.push_str(&format!(
-                "[SetUp \"1\"]\n[FEN \"{}\"]\n",
-                Fen::from_position(&self.start, EnPassantMode::Legal)
-            ));
+        self.pgn_tree.export()
+    }
+
+    fn result_token(&self) -> &'static str {
+        if self
+            .resigned
+            .is_some_and(|color| self.position().has_insufficient_material(!color))
+        {
+            return "1/2-1/2";
         }
-        result.push('\n');
-        let first_ply = (self.start.fullmoves().get() as usize - 1) * 2
-            + usize::from(self.start.turn() == Color::Black);
-        for (i, san) in self.san_history().iter().enumerate() {
-            let ply = first_ply + i;
-            if ply.is_multiple_of(2) {
-                result.push_str(&format!("{}. ", ply / 2 + 1));
-            } else if i == 0 {
-                result.push_str(&format!("{}... ", ply / 2 + 1));
-            }
-            result.push_str(san);
-            result.push(' ');
-        }
-        result.push_str(
-            if self.resigned.is_some()
-                || self.position().is_checkmate()
-                || self.time_forfeit.is_some_and(|(_, draw)| !draw)
-            {
-                let losing_color = self
-                    .resigned
-                    .or_else(|| self.time_forfeit.map(|(color, _)| color))
-                    .unwrap_or(self.position().turn());
-                if losing_color == Color::White {
-                    "0-1"
-                } else {
-                    "1-0"
-                }
-            } else if self.is_over() {
-                "1/2-1/2"
+        if self.resigned.is_some()
+            || self.position().is_checkmate()
+            || self.time_forfeit.is_some_and(|(_, draw)| !draw)
+        {
+            let losing_color = self
+                .resigned
+                .or_else(|| self.time_forfeit.map(|(color, _)| color))
+                .unwrap_or(self.position().turn());
+            if losing_color == Color::White {
+                "0-1"
             } else {
-                "*"
-            },
-        );
-        result
+                "1-0"
+            }
+        } else if self.is_over() {
+            "1/2-1/2"
+        } else {
+            "*"
+        }
+    }
+
+    fn sync_pgn_result(&mut self) {
+        let tree = &self.pgn_tree;
+        let mut parent = 0;
+        for &node in &self.pgn_path[..self.cursor] {
+            if tree.nodes[parent].children.first() != Some(&node) {
+                return;
+            }
+            parent = node;
+        }
+        if !tree.nodes[parent].children.is_empty() {
+            return;
+        }
+        let result = self.result_token().to_owned();
+        self.pgn_tree.result = result;
     }
 }
 
@@ -360,6 +518,22 @@ pub fn display_target(m: Move) -> Square {
     } else {
         m.to()
     }
+}
+
+fn local_pgn_tree(start: &Chess) -> PgnGame {
+    let mut tree = PgnGame::new(start.clone());
+    tree.headers = vec![
+        ("Event".into(), "Chess Chaos Lab".into()),
+        ("Site".into(), "Local".into()),
+    ];
+    if start != &Chess::default() {
+        tree.headers.push(("SetUp".into(), "1".into()));
+        tree.headers.push((
+            "FEN".into(),
+            Fen::from_position(start, EnPassantMode::Legal).to_string(),
+        ));
+    }
+    tree
 }
 
 fn repetition_key(p: &Chess) -> String {
@@ -403,6 +577,91 @@ mod tests {
         assert_eq!(perft(&p, 1), 20);
         assert_eq!(perft(&p, 2), 400);
         assert_eq!(perft(&p, 3), 8902);
+    }
+
+    #[test]
+    fn reference_perft_castling_en_passant_and_promotion() {
+        // https://www.chessprogramming.org/Perft_Results, positions 2, 3, and 4.
+        let cases = [
+            (
+                "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1",
+                48,
+                2039,
+                97862,
+            ),
+            ("8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - - 0 1", 14, 191, 2812),
+            (
+                "r3k2r/Pppp1ppp/1b3nbN/nP6/BBP1P3/q4N2/Pp1P2PP/R2Q1RK1 w kq - 0 1",
+                6,
+                264,
+                9467,
+            ),
+        ];
+        for (fen, one, two, three) in cases {
+            let game = Game::from_fen(fen).unwrap();
+            assert_eq!(perft(game.position(), 1), one, "{fen}");
+            assert_eq!(perft(game.position(), 2), two, "{fen}");
+            assert_eq!(perft(game.position(), 3), three, "{fen}");
+        }
+    }
+
+    #[test]
+    fn generated_legal_games_round_trip_through_pgn() {
+        for seed in 0..32usize {
+            let mut game = Game::default();
+            for ply in 0..48 {
+                let legal = game.legal_moves();
+                if legal.is_empty() {
+                    break;
+                }
+                game.play(legal[(seed * 17 + ply * 13) % legal.len()])
+                    .unwrap();
+            }
+            let restored = Game::from_pgn(&game.pgn()).unwrap();
+            assert_eq!(restored.fen(), game.fen(), "seed {seed}");
+        }
+    }
+
+    #[test]
+    fn castling_through_check_and_discovered_en_passant_are_illegal() {
+        let castle = Game::from_fen("k4r2/8/8/8/8/8/8/4K2R w K - 0 1").unwrap();
+        assert!(castle.move_from_to(Square::E1, Square::G1, None).is_none());
+        let mut ep = Game::from_fen("7k/8/8/4KPpr/8/8/8/8 w - g6 0 1").unwrap();
+        assert!(ep.play_uci("f5g6").is_err());
+    }
+
+    #[test]
+    fn claimable_draw_is_not_an_outcome_and_announced_move_can_be_claimed() {
+        let mut game = Game::default();
+        for _ in 0..2 {
+            for uci in ["g1f3", "g8f6", "f3g1", "f6g8"] {
+                game.play_uci(uci).unwrap();
+            }
+        }
+        assert!(game.can_claim_draw());
+        assert_eq!(game.outcome(), GameOutcome::Ongoing);
+        assert!(!game.is_over());
+        let mut prospective = Game::default();
+        for uci in ["g1f3", "g8f6", "f3g1", "f6g8", "g1f3", "g8f6", "f3g1"] {
+            prospective.play_uci(uci).unwrap();
+        }
+        let movement = "f6g8"
+            .parse::<UciMove>()
+            .unwrap()
+            .to_move(prospective.position())
+            .unwrap();
+        assert!(prospective.can_claim_draw_after(movement));
+        assert!(prospective.claim_draw_after(movement));
+        assert_eq!(prospective.outcome(), GameOutcome::Draw);
+        assert_eq!(prospective.ply(), 7);
+    }
+
+    #[test]
+    fn mating_material_is_not_confused_with_forced_mate() {
+        let two_knights = Game::from_fen("7k/8/8/8/8/8/8/KNN5 w - - 0 1").unwrap();
+        assert!(!two_knights.is_over());
+        let lone_bishop = Game::from_fen("7k/8/8/8/8/8/8/KB6 w - - 0 1").unwrap();
+        assert_eq!(lone_bishop.outcome(), GameOutcome::Draw);
     }
 
     #[test]
@@ -474,7 +733,8 @@ mod tests {
         }
         let restored = Game::from_pgn(&g.pgn()).unwrap();
         assert_eq!(restored.fen(), g.fen());
-        assert!(Game::from_pgn("1. e4 {comment} e5").is_err());
+        let annotated = Game::from_pgn("1. e4 {comment} e5 *").unwrap();
+        assert!(annotated.pgn().contains("{comment}"));
         assert!(Game::from_pgn("1. e4 e5 1-0").is_ok());
 
         let mut black_start = Game::default();
@@ -495,6 +755,11 @@ mod tests {
         game.resign(Color::White);
         assert_eq!(game.status(), "White resigned");
         assert!(game.pgn().ends_with("0-1"));
+
+        let mut no_mate = Game::from_fen("7k/8/8/8/8/8/8/KR6 w - - 0 1").unwrap();
+        no_mate.resign(Color::White);
+        assert_eq!(no_mate.outcome(), GameOutcome::Draw);
+        assert!(no_mate.pgn().ends_with("1/2-1/2"));
     }
 
     #[test]
@@ -570,5 +835,111 @@ mod tests {
         }
         assert_eq!(game.repetition_count(), 5);
         assert_eq!(game.status(), "Draw by fivefold repetition");
+    }
+
+    #[test]
+    fn imported_variation_navigation_and_autosave_preserve_tree() {
+        let mut game =
+            Game::from_pgn("[Event \"Test\"]\n\n1. e4 {main} (1. d4 $1 d5) e5 *").unwrap();
+        let branch = game.pgn_tree().nodes[0].children[1];
+        game.goto_pgn_node(branch).unwrap();
+        assert_eq!(game.san_history(), &["d4"]);
+        game.play_uci("g8f6").unwrap();
+        let pgn = game.pgn();
+        assert!(pgn.contains("1. d4 $1"));
+        assert!(pgn.contains("( 1... Nf6 )"));
+        assert!(pgn.contains("{main}"));
+        let restored = Game::from_save_text(&game.save_text()).unwrap();
+        assert_eq!(restored.fen(), game.fen());
+        assert_eq!(restored.pgn(), pgn);
+        assert_eq!(restored.pgn_tree().nodes[0].children.len(), 2);
+    }
+
+    #[test]
+    fn new_game_keeps_old_continuation_as_variation_after_undo() {
+        let mut game = Game::default();
+        game.play_uci("e2e4").unwrap();
+        game.play_uci("e7e5").unwrap();
+        assert!(game.undo());
+        game.play_uci("c7c5").unwrap();
+        let tree = game.pgn_tree();
+        let e4 = tree.nodes[0].children[0];
+        assert_eq!(tree.nodes[e4].children.len(), 2);
+        assert_eq!(tree.nodes[tree.nodes[e4].children[0]].san, "e5");
+        assert_eq!(tree.nodes[tree.nodes[e4].children[1]].san, "c5");
+        let restored = Game::from_save_text(&game.save_text()).unwrap();
+        assert_eq!(restored.fen(), game.fen());
+        assert_eq!(restored.pgn(), game.pgn());
+    }
+
+    #[test]
+    fn legacy_three_line_save_still_loads() {
+        let legacy = format!("{}\ne2e4 e7e5\nactive\n", Game::default().fen());
+        let game = Game::from_save_text(&legacy).unwrap();
+        assert_eq!(game.san_history(), &["e4", "e5"]);
+        assert_eq!(game.pgn_tree().nodes.len(), 3);
+        assert!(Game::from_pgn(&game.pgn()).is_ok());
+    }
+
+    #[test]
+    fn imported_fivefold_repetition_survives_autosave() {
+        let cycle = "Nf3 Nf6 Ng1 Ng8 ".repeat(4);
+        let game = Game::from_pgn(&format!("{cycle}1/2-1/2")).unwrap();
+        assert_eq!(game.repetition_count(), 5);
+        assert_eq!(game.outcome(), GameOutcome::Draw);
+        let restored = Game::from_save_text(&game.save_text()).unwrap();
+        assert_eq!(restored.repetition_count(), 5);
+        assert_eq!(restored.outcome(), GameOutcome::Draw);
+        assert_eq!(restored.pgn(), game.pgn());
+    }
+
+    #[test]
+    fn legacy_terminal_outcomes_keep_pgn_result_across_save_formats() {
+        for (outcome, result) in [
+            ("resign:White", "0-1"),
+            ("resign:Black", "1-0"),
+            ("draw", "1/2-1/2"),
+            ("time:White:0", "0-1"),
+            ("time:Black:0", "1-0"),
+            ("time:White:1", "1/2-1/2"),
+            ("time:Black:1", "1/2-1/2"),
+        ] {
+            let legacy = format!("{}\ne2e4\n{outcome}\n", Game::default().fen());
+            let first = Game::from_save_text(&legacy).unwrap();
+            assert_eq!(first.pgn_tree().result(), result, "{outcome}");
+            assert_eq!(
+                first.outcome(),
+                if result == "1/2-1/2" {
+                    GameOutcome::Draw
+                } else if result == "1-0" {
+                    GameOutcome::Win(Color::White)
+                } else {
+                    GameOutcome::Win(Color::Black)
+                },
+                "{outcome}"
+            );
+            let pgn = first.pgn();
+            assert!(pgn.ends_with(result), "{outcome}: {pgn}");
+            let second = Game::from_save_text(&first.save_text()).unwrap();
+            assert_eq!(second.pgn(), pgn, "{outcome}");
+            let third = Game::from_save_text(&second.save_text()).unwrap();
+            assert_eq!(third.pgn(), pgn, "{outcome}");
+            assert_eq!(third.outcome(), first.outcome(), "{outcome}");
+        }
+    }
+
+    #[test]
+    fn visiting_terminal_variation_keeps_mainline_result() {
+        let mut game =
+            Game::from_pgn("[Result \"1-0\"]\n\n1. e4 (1. f3 e5 2. g4 Qh4#) e5 1-0").unwrap();
+        let branch = game.pgn_tree().nodes[0].children[1];
+        let mut node = branch;
+        while let Some(&next) = game.pgn_tree().nodes[node].children.first() {
+            node = next;
+        }
+        game.goto_pgn_node(node).unwrap();
+        assert_eq!(game.outcome(), GameOutcome::Win(Color::Black));
+        assert!(game.pgn().ends_with("1-0"));
+        assert!(Game::from_pgn(&game.pgn()).is_ok());
     }
 }

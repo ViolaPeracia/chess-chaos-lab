@@ -1,6 +1,7 @@
 //! A bounded PGN game tree. Node zero is the starting position; each node's
 //! first child is its mainline continuation and later children are RAVs.
 
+use crate::repetition_key;
 use shakmaty::{
     CastlingMode, Chess, Color, Move, Position,
     fen::Fen,
@@ -213,6 +214,7 @@ impl PgnGame {
             || position.is_stalemate()
             || position.is_insufficient_material()
             || position.halfmoves() >= 150
+            || self.is_fivefold_repetition(parent)
         {
             return Err("Move after automatic game termination".into());
         }
@@ -235,6 +237,24 @@ impl PgnGame {
         });
         self.nodes[parent].children.push(index);
         Ok(index)
+    }
+
+    fn is_fivefold_repetition(&self, node: usize) -> bool {
+        let position = &self.nodes[node].position;
+        let key = repetition_key(position);
+        let mut ancestor = Some(node);
+        let mut matches = 0;
+        for _ in 0..=position.halfmoves() {
+            let Some(index) = ancestor else { break };
+            if repetition_key(&self.nodes[index].position) == key {
+                matches += 1;
+                if matches == 5 {
+                    return true;
+                }
+            }
+            ancestor = self.nodes[index].parent;
+        }
+        false
     }
 
     fn write_line(&self, mut parent: usize, mut branch: usize, out: &mut String) {
@@ -737,5 +757,17 @@ mod tests {
         let game = PgnGame::parse(input).unwrap();
         assert_eq!(game.nodes.len(), 5);
         assert_eq!(PgnGame::parse(&game.export()).unwrap().nodes.len(), 5);
+    }
+
+    #[test]
+    fn move_after_fivefold_repetition_is_rejected_on_mainline_and_variation() {
+        let cycle = "Nf3 Nf6 Ng1 Ng8 ".repeat(4);
+        for input in [format!("{cycle}e4 *"), format!("1. e4 ({cycle}e4) *")] {
+            assert_eq!(
+                PgnGame::parse(&input).err().as_deref(),
+                Some("Move after automatic game termination")
+            );
+        }
+        assert!(PgnGame::parse(&format!("{}e4 *", "Nf3 Nf6 Ng1 Ng8 ".repeat(3))).is_ok());
     }
 }

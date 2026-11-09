@@ -5,7 +5,7 @@ This roadmap is based on the current source, existing project notes, and the rep
 | Milestone | Status | Dependencies | Acceptance evidence |
 | --- | --- | --- | --- |
 | M0 — Playable Windows desktop `0.1.0` | Completed | None | 27 automated tests, a Windows GUI audit of the main game and recovery paths, keyboard-only play, Narrator Speech Recap, and 125%/150% display scaling. The [audit](m0-windows-audit.md) records exact observations and remaining scope limits; the public ZIP/checksum and CI establish the original release baseline. |
-| M1 — Chess correctness and PGN | In progress | Rules and notation tests | 44 automated tests, reference perft, nested PGN round trips, Windows GUI/file smoke and both PR CI runs pass; dependent PRs await review and merge. |
+| M1 — Chess correctness and PGN | Completed | Rules and notation tests | 49 automated tests, reference perft, nested PGN round trips, Windows GUI/file smoke, and green Windows/site CI plus SonarCloud for [core PR #14](https://github.com/ViolaPeracia/chess-chaos-lab/pull/14) and [UI PR #15](https://github.com/ViolaPeracia/chess-chaos-lab/pull/15). All three P2 review findings have regression tests and resolved threads. |
 | M2 — Engine reliability | Planned | M1 position correctness | Full real-engine games, malformed output/timeout/crash tests, process cleanup, bounded resources. |
 | M3 — Analysis and training | Planned | M2, licensed data | Review and score history, puzzles/openings with provenance and tests. |
 | M4 — Advanced modes | Planned | M1/M2, match scheduler | Recoverable AI tournaments and variant-specific rules, notation, and tests. |
@@ -14,4 +14,4 @@ This roadmap is based on the current source, existing project notes, and the rep
 | M7 — Hardening | Planned | Stable feature paths | Fuzzing, corruption recovery, long-running process tests, profiling. |
 | M8 — Distribution | Planned | M0 release pipeline | Installer, signed artifacts if feasible, license manifest, verified Linux build on Linux. |
 
-Current partial implementations are detailed in the [feature matrix](feature-matrix.md). The [published `v0.1.0` release](https://github.com/ViolaPeracia/chess-chaos-lab/releases/tag/v0.1.0) establishes the original Windows package and CI baseline. M0 completion does not create a new release or imply that M1/M2/M5 work is complete. The next path is broader chess/PGN correctness, full UCI matches, and accessibility refinements. No dates are promised for unscoped milestones.
+Current partial implementations are detailed in the [feature matrix](feature-matrix.md). The [published `v0.1.0` release](https://github.com/ViolaPeracia/chess-chaos-lab/releases/tag/v0.1.0) establishes the original Windows package and CI baseline. M1 completion does not create a new release or imply that M2/M5 work is complete. The next path is full UCI matches, accessibility refinements, and the broader hardening listed under M7. No dates are promised for unscoped milestones.

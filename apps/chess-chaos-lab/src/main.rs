@@ -705,20 +705,25 @@ impl eframe::App for App {
                             ui.heading("Moves");
                             let rows = pgn_rows(self.game.pgn_tree());
                             let mut selected_node = None;
+                            let row_height = pgn_row_height(ui);
                             egui::ScrollArea::vertical().max_height(200.0).show_rows(
                                 ui,
-                                22.0,
+                                row_height,
                                 rows.len(),
                                 |ui, range| {
-                                    for row in &rows[range] {
+                                    for &(node, depth) in &rows[range] {
+                                        let label =
+                                            format_pgn_row(self.game.pgn_tree(), node, depth);
+                                        let width = ui.available_width();
                                         if ui
                                             .add_enabled(
                                                 self.clock.is_none(),
-                                                egui::Button::new(&row.1),
+                                                pgn_row_button(&label, width, row_height),
                                             )
+                                            .on_hover_text(&label)
                                             .clicked()
                                         {
-                                            selected_node = Some(row.0);
+                                            selected_node = Some(node);
                                         }
                                     }
                                 },
@@ -975,7 +980,21 @@ fn read_pgn_file(path: &Path) -> Result<String, String> {
     Ok(text)
 }
 
-fn pgn_rows(tree: &PgnGame) -> Vec<(usize, String)> {
+fn pgn_row_height(ui: &egui::Ui) -> f32 {
+    ui.spacing()
+        .interact_size
+        .y
+        .max(ui.text_style_height(&egui::TextStyle::Button) + 2.0 * ui.spacing().button_padding.y)
+        .max(22.0)
+}
+
+fn pgn_row_button(label: &str, width: f32, height: f32) -> egui::Button<'_> {
+    egui::Button::new(label)
+        .truncate()
+        .min_size(egui::vec2(width, height))
+}
+
+fn pgn_rows(tree: &PgnGame) -> Vec<(usize, usize)> {
     let mut rows = Vec::with_capacity(tree.nodes().len().saturating_sub(1));
     let Some(&first) = tree.nodes()[0].children.first() else {
         return rows;
@@ -983,29 +1002,7 @@ fn pgn_rows(tree: &PgnGame) -> Vec<(usize, String)> {
     let mut stack = vec![(first, 0usize, true)];
     while let Some((node, depth, siblings)) = stack.pop() {
         let entry = &tree.nodes()[node];
-        let (number, side) = tree.move_number_at(node).expect("move node has a parent");
-        let prefix = if side == Color::White {
-            format!("{number}.")
-        } else {
-            format!("{number}...")
-        };
-        let annotations = entry
-            .nags
-            .iter()
-            .map(|nag| format!(" ${nag}"))
-            .collect::<String>();
-        rows.push((
-            node,
-            format!(
-                "{}{} {}{} {} {}",
-                "  ".repeat(depth.min(16)),
-                prefix,
-                entry.san,
-                annotations,
-                entry.before.join(" "),
-                entry.after.join(" ")
-            ),
-        ));
+        rows.push((node, depth));
         if let Some(&continuation) = entry.children.first() {
             stack.push((continuation, depth, true));
         }
@@ -1017,6 +1014,40 @@ fn pgn_rows(tree: &PgnGame) -> Vec<(usize, String)> {
         }
     }
     rows
+}
+
+fn format_pgn_row(tree: &PgnGame, node: usize, depth: usize) -> String {
+    let entry = &tree.nodes()[node];
+    let (number, side) = tree.move_number_at(node).expect("move node has a parent");
+    let prefix = if side == Color::White {
+        format!("{number}.")
+    } else {
+        format!("{number}...")
+    };
+    let annotations = entry
+        .nags
+        .iter()
+        .map(|nag| format!(" ${nag}"))
+        .collect::<String>();
+    let label = format!(
+        "{}{} {}{} {} {}",
+        "  ".repeat(depth.min(16)),
+        prefix,
+        entry.san,
+        annotations,
+        entry.before.join(" "),
+        entry.after.join(" ")
+    );
+    label
+        .chars()
+        .map(|ch| {
+            if matches!(ch, '\n' | '\r' | '\u{2028}' | '\u{2029}') {
+                ' '
+            } else {
+                ch
+            }
+        })
+        .collect()
 }
 
 fn format_clock(milliseconds: u64) -> String {
@@ -1147,11 +1178,62 @@ mod tests {
         assert!(clock.is_none());
         assert!(restored.pgn().contains("( 1. d4 $1 )"));
         let rows = pgn_rows(restored.pgn_tree());
-        assert!(rows[0].1.contains("1. e4"));
-        assert!(rows[1].1.contains("1. d4 $1"));
-        assert!(rows[2].1.contains("1... e5"));
+        assert!(format_pgn_row(restored.pgn_tree(), rows[0].0, rows[0].1).contains("1. e4"));
+        assert!(format_pgn_row(restored.pgn_tree(), rows[1].0, rows[1].1).contains("1. d4 $1"));
+        assert!(format_pgn_row(restored.pgn_tree(), rows[2].0, rows[2].1).contains("1... e5"));
         fs::write(&path, vec![b'x'; 1_000_001]).unwrap();
         assert!(read_pgn_file(&path).is_err());
         fs::remove_file(path).unwrap();
+    }
+
+    #[test]
+    fn annotated_move_button_fits_virtualized_row() {
+        let comment = "A long analysis with many words\n".repeat(20);
+        let source =
+            format!("1. e4 $1 $2 $3 $4 $5 {{{comment}}} (1. d4 (1. c4 {{{comment}}}) d5) e5 *");
+        let game = Game::from_pgn(&source).unwrap();
+        let rows = pgn_rows(game.pgn_tree());
+        assert_eq!(rows.len(), 5);
+        let label = format_pgn_row(game.pgn_tree(), rows[0].0, rows[0].1);
+        assert!(!label.contains('\n'));
+        assert!(label.contains("$1 $2 $3 $4 $5"));
+        let mut variation = game.clone();
+        let c4 = rows
+            .iter()
+            .find(|&&(node, _)| game.pgn_tree().nodes()[node].san == "c4")
+            .unwrap()
+            .0;
+        variation.goto_pgn_node(c4).unwrap();
+        assert_eq!(variation.san_history(), &["c4"]);
+        egui::__run_test_ui(|ui| {
+            ui.set_width(320.0);
+            let row_height = pgn_row_height(ui);
+            let response = ui.add(pgn_row_button(&label, 320.0, row_height));
+            assert_eq!(response.rect.height(), row_height);
+        });
+    }
+
+    #[test]
+    fn thousands_of_move_rows_keep_deep_scroll_indices_aligned() {
+        egui::__run_test_ui(|ui| {
+            ui.set_width(320.0);
+            let row_height = pgn_row_height(ui);
+            for (salt, offset, target) in [(0, 0.0, 0), (1, 2_500.0, 100), (2, 150_000.0, 4_999)] {
+                let mut visible = 0..0;
+                egui::ScrollArea::vertical()
+                    .id_salt(salt)
+                    .max_height(200.0)
+                    .vertical_scroll_offset(offset)
+                    .show_rows(ui, row_height, 5_000, |ui, range| {
+                        visible = range.clone();
+                        for index in range {
+                            let label = format!("{index}. e4 {}", "annotation ".repeat(60));
+                            let response = ui.add(pgn_row_button(&label, 320.0, row_height));
+                            assert_eq!(response.rect.height(), row_height);
+                        }
+                    });
+                assert!(visible.contains(&target), "{visible:?} missing {target}");
+            }
+        });
     }
 }

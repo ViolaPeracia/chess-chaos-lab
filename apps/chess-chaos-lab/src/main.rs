@@ -1,11 +1,12 @@
 use chess_chaos_ai::{Style, choose, material_balance, perft};
 use chess_chaos_core::clock::{Clock, ClockMode};
-use chess_chaos_core::{Game, display_target};
+use chess_chaos_core::{Game, display_target, pgn::PgnGame};
 use chess_chaos_uci::{Analysis, analyze};
 use eframe::egui::{self, Color32, RichText, Vec2};
 use shakmaty::{Color, Move, Piece, Position, Role, Square, uci::UciMove};
 use std::{
-    fs, io,
+    fs,
+    io::{self, Read},
     path::{Path, PathBuf},
     sync::mpsc::{self, Receiver},
     thread,
@@ -34,6 +35,7 @@ struct App {
     ai_generation: u64,
     show_pgn: bool,
     pgn_input: String,
+    pgn_file_path: String,
     autoplay: bool,
     engine_path: String,
     analysis_rx: Option<Receiver<Result<Analysis, String>>>,
@@ -93,6 +95,7 @@ impl Default for App {
             ai_generation: 0,
             show_pgn: false,
             pgn_input: String::new(),
+            pgn_file_path: String::new(),
             autoplay: false,
             engine_path: String::new(),
             analysis_rx: None,
@@ -700,18 +703,38 @@ impl eframe::App for App {
                             }
                             ui.separator();
                             ui.heading("Moves");
-                            egui::ScrollArea::vertical()
-                                .max_height(200.0)
-                                .show(ui, |ui| {
-                                    for (i, pair) in self.game.san_history().chunks(2).enumerate() {
-                                        ui.label(format!(
-                                            "{}. {} {}",
-                                            i + 1,
-                                            pair[0],
-                                            pair.get(1).map_or("", String::as_str)
-                                        ));
+                            let rows = pgn_rows(self.game.pgn_tree());
+                            let mut selected_node = None;
+                            egui::ScrollArea::vertical().max_height(200.0).show_rows(
+                                ui,
+                                22.0,
+                                rows.len(),
+                                |ui, range| {
+                                    for row in &rows[range] {
+                                        if ui
+                                            .add_enabled(
+                                                self.clock.is_none(),
+                                                egui::Button::new(&row.1),
+                                            )
+                                            .clicked()
+                                        {
+                                            selected_node = Some(row.0);
+                                        }
                                     }
-                                });
+                                },
+                            );
+                            if let Some(node) = selected_node {
+                                match self.game.goto_pgn_node(node) {
+                                    Ok(()) => {
+                                        self.opponent = Opponent::Local;
+                                        self.autoplay = false;
+                                        self.thinking = None;
+                                        self.analysis_rx = None;
+                                        self.after_move();
+                                    }
+                                    Err(error) => self.message = error,
+                                }
+                            }
                             ui.separator();
                             ui.heading("Position & export");
                             let label = ui.label("FEN");
@@ -736,13 +759,33 @@ impl eframe::App for App {
                                 ui.label(self.game.pgn());
                             }
                             ui.separator();
-                            let label = ui.label("Paste plain PGN mainline");
+                            let label = ui.label("Paste PGN (one game, including variations)");
                             ui.text_edit_multiline(&mut self.pgn_input)
                                 .labelled_by(label.id);
                             if ui.button("Load PGN").clicked() {
                                 match Game::from_pgn(&self.pgn_input) {
-                                    Ok(g) => self.reset(g),
+                                    Ok(g) => {
+                                        self.opponent = Opponent::Local;
+                                        self.autoplay = false;
+                                        self.reset(g);
+                                    }
                                     Err(e) => self.message = e,
+                                }
+                            }
+                            ui.horizontal(|ui| {
+                                ui.label("PGN file path");
+                                ui.text_edit_singleline(&mut self.pgn_file_path);
+                            });
+                            if ui.button("Load PGN file").clicked() {
+                                match read_pgn_file(Path::new(self.pgn_file_path.trim()))
+                                    .and_then(|text| Game::from_pgn(&text))
+                                {
+                                    Ok(game) => {
+                                        self.opponent = Opponent::Local;
+                                        self.autoplay = false;
+                                        self.reset(game);
+                                    }
+                                    Err(error) => self.message = error,
                                 }
                             }
                             ui.separator();
@@ -845,6 +888,12 @@ fn save_game(game: &Game, clock: Option<&Clock>) -> std::io::Result<()> {
     if let Some(clock) = clock {
         text.push_str(&format!("{}\n", clock.save_text()));
     }
+    if text.len() > 4_000_000 {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Save exceeds 4 MB limit",
+        ));
+    }
     fs::write(&temp, text)?;
     fs::rename(temp, path)
 }
@@ -855,17 +904,26 @@ fn load_game(path: &Path) -> Result<Option<(Game, Option<Clock>)>, String> {
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error.to_string()),
     };
-    if metadata.len() > 1_000_000 {
-        return Err("Save exceeds 1 MB limit".into());
+    if metadata.len() > 4_000_000 {
+        return Err("Save exceeds 4 MB limit".into());
     }
-    let text = fs::read_to_string(path).map_err(|error| error.to_string())?;
-    if !(3..=4).contains(&text.lines().count()) {
+    let mut text = String::new();
+    fs::File::open(path)
+        .map_err(|error| error.to_string())?
+        .take(4_000_001)
+        .read_to_string(&mut text)
+        .map_err(|error| error.to_string())?;
+    if text.len() > 4_000_000 {
+        return Err("Save exceeds 4 MB limit".into());
+    }
+    if !(3..=5).contains(&text.lines().count()) {
         return Err("Invalid autosave structure".into());
     }
     let game = Game::from_save_text(&text)?;
     let clock = text
         .lines()
-        .nth(3)
+        .skip(3)
+        .find(|line| !line.starts_with("pgn:"))
         .map(Clock::from_save_text)
         .transpose()?
         .map(|clock| {
@@ -880,10 +938,10 @@ fn load_game(path: &Path) -> Result<Option<(Game, Option<Clock>)>, String> {
 }
 
 fn preserve_invalid_save(path: &Path) -> io::Result<PathBuf> {
-    if fs::metadata(path)?.len() > 1_000_000 {
+    if fs::metadata(path)?.len() > 4_000_000 {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,
-            "Autosave exceeds 1 MB; move it aside to resume saving",
+            "Autosave exceeds 4 MB; move it aside to resume saving",
         ));
     }
     let timestamp = SystemTime::now()
@@ -898,6 +956,67 @@ fn preserve_invalid_save(path: &Path) -> io::Result<PathBuf> {
     io::copy(&mut source, &mut destination)?;
     destination.sync_all()?;
     Ok(backup)
+}
+
+fn read_pgn_file(path: &Path) -> Result<String, String> {
+    let metadata = fs::metadata(path).map_err(|error| format!("PGN file: {error}"))?;
+    if metadata.len() > 1_000_000 {
+        return Err("PGN exceeds 1 MB limit".into());
+    }
+    let mut text = String::new();
+    fs::File::open(path)
+        .map_err(|error| format!("PGN file: {error}"))?
+        .take(1_000_001)
+        .read_to_string(&mut text)
+        .map_err(|error| format!("PGN file: {error}"))?;
+    if text.len() > 1_000_000 {
+        return Err("PGN exceeds 1 MB limit".into());
+    }
+    Ok(text)
+}
+
+fn pgn_rows(tree: &PgnGame) -> Vec<(usize, String)> {
+    let mut rows = Vec::with_capacity(tree.nodes().len().saturating_sub(1));
+    let Some(&first) = tree.nodes()[0].children.first() else {
+        return rows;
+    };
+    let mut stack = vec![(first, 0usize, true)];
+    while let Some((node, depth, siblings)) = stack.pop() {
+        let entry = &tree.nodes()[node];
+        let (number, side) = tree.move_number_at(node).expect("move node has a parent");
+        let prefix = if side == Color::White {
+            format!("{number}.")
+        } else {
+            format!("{number}...")
+        };
+        let annotations = entry
+            .nags
+            .iter()
+            .map(|nag| format!(" ${nag}"))
+            .collect::<String>();
+        rows.push((
+            node,
+            format!(
+                "{}{} {}{} {} {}",
+                "  ".repeat(depth.min(16)),
+                prefix,
+                entry.san,
+                annotations,
+                entry.before.join(" "),
+                entry.after.join(" ")
+            ),
+        ));
+        if let Some(&continuation) = entry.children.first() {
+            stack.push((continuation, depth, true));
+        }
+        if siblings {
+            let parent = entry.parent.expect("move node has a parent");
+            for &variation in tree.nodes()[parent].children.iter().skip(1).rev() {
+                stack.push((variation, depth + 1, false));
+            }
+        }
+    }
+    rows
 }
 
 fn format_clock(milliseconds: u64) -> String {
@@ -985,7 +1104,7 @@ mod tests {
         ));
         fs::write(&path, Game::default().fen()).unwrap();
         assert!(load_game(&path).is_err());
-        fs::write(&path, vec![b'x'; 1_000_001]).unwrap();
+        fs::write(&path, vec![b'x'; 4_000_001]).unwrap();
         assert!(load_game(&path).is_err());
         assert!(preserve_invalid_save(&path).is_err());
         fs::remove_file(path).unwrap();
@@ -1007,5 +1126,32 @@ mod tests {
             game.play(selected).unwrap();
         }
         assert!(game.ply() > 20);
+    }
+
+    #[test]
+    fn pgn_file_import_and_autosave_restore_variations() {
+        let path = std::env::temp_dir().join(format!(
+            "chess-chaos-pgn-test-{}-{}.txt",
+            std::process::id(),
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let source = "[Event \"File\"]\n\n1. e4 {main} (1. d4 $1) e5 *";
+        fs::write(&path, source).unwrap();
+        let game = Game::from_pgn(&read_pgn_file(&path).unwrap()).unwrap();
+        assert_eq!(game.pgn_tree().nodes()[0].children.len(), 2);
+        fs::write(&path, game.save_text()).unwrap();
+        let (restored, clock) = load_game(&path).unwrap().unwrap();
+        assert!(clock.is_none());
+        assert!(restored.pgn().contains("( 1. d4 $1 )"));
+        let rows = pgn_rows(restored.pgn_tree());
+        assert!(rows[0].1.contains("1. e4"));
+        assert!(rows[1].1.contains("1. d4 $1"));
+        assert!(rows[2].1.contains("1... e5"));
+        fs::write(&path, vec![b'x'; 1_000_001]).unwrap();
+        assert!(read_pgn_file(&path).is_err());
+        fs::remove_file(path).unwrap();
     }
 }

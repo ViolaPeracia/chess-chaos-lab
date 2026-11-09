@@ -230,6 +230,7 @@ impl Game {
             "active" => {}
             _ => return Err("Invalid save outcome".into()),
         }
+        game.sync_pgn_result();
         if let Some(line) = lines.next()
             && let Some(encoded) = line.strip_prefix("pgn:")
         {
@@ -878,6 +879,53 @@ mod tests {
         assert_eq!(game.san_history(), &["e4", "e5"]);
         assert_eq!(game.pgn_tree().nodes.len(), 3);
         assert!(Game::from_pgn(&game.pgn()).is_ok());
+    }
+
+    #[test]
+    fn imported_fivefold_repetition_survives_autosave() {
+        let cycle = "Nf3 Nf6 Ng1 Ng8 ".repeat(4);
+        let game = Game::from_pgn(&format!("{cycle}1/2-1/2")).unwrap();
+        assert_eq!(game.repetition_count(), 5);
+        assert_eq!(game.outcome(), GameOutcome::Draw);
+        let restored = Game::from_save_text(&game.save_text()).unwrap();
+        assert_eq!(restored.repetition_count(), 5);
+        assert_eq!(restored.outcome(), GameOutcome::Draw);
+        assert_eq!(restored.pgn(), game.pgn());
+    }
+
+    #[test]
+    fn legacy_terminal_outcomes_keep_pgn_result_across_save_formats() {
+        for (outcome, result) in [
+            ("resign:White", "0-1"),
+            ("resign:Black", "1-0"),
+            ("draw", "1/2-1/2"),
+            ("time:White:0", "0-1"),
+            ("time:Black:0", "1-0"),
+            ("time:White:1", "1/2-1/2"),
+            ("time:Black:1", "1/2-1/2"),
+        ] {
+            let legacy = format!("{}\ne2e4\n{outcome}\n", Game::default().fen());
+            let first = Game::from_save_text(&legacy).unwrap();
+            assert_eq!(first.pgn_tree().result(), result, "{outcome}");
+            assert_eq!(
+                first.outcome(),
+                if result == "1/2-1/2" {
+                    GameOutcome::Draw
+                } else if result == "1-0" {
+                    GameOutcome::Win(Color::White)
+                } else {
+                    GameOutcome::Win(Color::Black)
+                },
+                "{outcome}"
+            );
+            let pgn = first.pgn();
+            assert!(pgn.ends_with(result), "{outcome}: {pgn}");
+            let second = Game::from_save_text(&first.save_text()).unwrap();
+            assert_eq!(second.pgn(), pgn, "{outcome}");
+            let third = Game::from_save_text(&second.save_text()).unwrap();
+            assert_eq!(third.pgn(), pgn, "{outcome}");
+            assert_eq!(third.outcome(), first.outcome(), "{outcome}");
+        }
     }
 
     #[test]
